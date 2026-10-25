@@ -13,5 +13,8 @@
 		}
 	},
 	"packageManager": "pnpm@12.15.0",
-	"type": "module"
+	"type": "module",
+	"devDependencies": {
+		"oxfmt": "^0.74.0"
+	}
 }
