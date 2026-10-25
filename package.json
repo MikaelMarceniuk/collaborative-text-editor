@@ -1,0 +1,17 @@
+{
+	"name": "@collaborative-text-editor/root",
+	"version": "1.0.0",
+	"scripts": {},
+	"keywords": [],
+	"author": "Mikael Campos Marceniuk",
+	"license": "ISC",
+	"devEngines": {
+		"packageManager": {
+			"name": "pnpm",
+			"version": "12.15.0",
+			"onFail": "download"
+		}
+	},
+	"packageManager": "pnpm@12.15.0",
+	"type": "module"
+}
