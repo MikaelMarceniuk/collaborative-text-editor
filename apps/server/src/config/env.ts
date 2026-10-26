@@ -13,6 +13,8 @@ const envSchema = z.object({
 
 	BETTER_AUTH_SECRET: z.string().min(32),
 	BETTER_AUTH_URL: z.url(),
+
+	WEB_URL: z.url().default('http://localhost:5173'),
 });
 
 const parsed = envSchema.safeParse(process.env);

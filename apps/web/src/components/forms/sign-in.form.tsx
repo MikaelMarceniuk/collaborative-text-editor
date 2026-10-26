@@ -10,8 +10,11 @@ import {
 	FieldSeparator,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { useContinueAsGuest } from '@/hooks/use-continue-as-guest.hook';
 
 export const SignInForm: React.FC<React.ComponentProps<'form'>> = ({ className, ...props }) => {
+	const { handleGuestSignIn, isGuestPending } = useContinueAsGuest();
+
 	return (
 		<form className={cn('flex flex-col gap-6', className)} {...props}>
 			<FieldGroup>
@@ -39,7 +42,12 @@ export const SignInForm: React.FC<React.ComponentProps<'form'>> = ({ className, 
 				</Field>
 				<FieldSeparator>Or continue with</FieldSeparator>
 				<Field>
-					<Button variant="outline" type="button">
+					<Button
+						variant="outline"
+						type="button"
+						disabled={isGuestPending}
+						onClick={handleGuestSignIn}
+					>
 						<IconSpy />
 						Continue as guest
 					</Button>
