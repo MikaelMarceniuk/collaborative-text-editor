@@ -1,11 +1,11 @@
 import { useTransition } from 'react';
-import { useNavigate } from 'react-router';
+import { useRevalidator } from 'react-router';
 
 import { toast } from '@/components/ui/toast';
 import { authClient } from '@/lib/auth-client.lib';
 
 export const useContinueAsGuest = () => {
-	const navigate = useNavigate();
+	const { revalidate } = useRevalidator();
 	const [isGuestPending, startGuestTransition] = useTransition();
 
 	const handleGuestSignIn = () => {
@@ -36,7 +36,7 @@ export const useContinueAsGuest = () => {
 				description: "You're using a temporary account. Sign up anytime to keep your documents.",
 			});
 
-			navigate('/');
+			await revalidate();
 		});
 	};
 

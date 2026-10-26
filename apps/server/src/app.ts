@@ -7,9 +7,9 @@ import { healthRouter } from './https/routes/health.js';
 
 export const app = express();
 
-app.all('/api/auth/{*any}', toNodeHandler(auth));
-
 app.use(corsConfig);
 app.use(express.json());
+
+app.all('/api/auth/{*any}', toNodeHandler(auth));
 
 app.use(healthRouter);
