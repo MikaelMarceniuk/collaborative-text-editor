@@ -5,6 +5,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router';
 import './index.css';
 import { AuthGuard } from './components/guards/auth.guard';
 import { GuestGuard } from './components/guards/guest.guard';
+import { ThemeProvider } from './components/providers/theme-provider';
 import { SessionFallback } from './components/session-fallback';
 import { Toaster } from './components/ui/toast';
 import { sessionLoader } from './loaders/session.loader';
@@ -25,7 +26,9 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById('root')!).render(
 	<StrictMode>
-		<Toaster />
-		<RouterProvider router={router} />
+		<ThemeProvider>
+			<Toaster />
+			<RouterProvider router={router} />
+		</ThemeProvider>
 	</StrictMode>,
 );

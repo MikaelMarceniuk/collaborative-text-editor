@@ -1,5 +1,6 @@
 import { IconLogout } from '@tabler/icons-react';
 
+import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { useSession } from '@/hooks/use-session.hook';
 import { useSignOut } from '@/hooks/use-sign-out.hook';
@@ -34,6 +35,9 @@ export const RootPage = () => {
 							Guest
 						</span>
 					)}
+					<div className="ml-auto">
+						<ThemeToggle />
+					</div>
 				</div>
 
 				<InfoList
