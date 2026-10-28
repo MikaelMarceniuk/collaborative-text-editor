@@ -9,12 +9,11 @@ import { Subscript } from '@tiptap/extension-subscript';
 import { Superscript } from '@tiptap/extension-superscript';
 import { TextAlign } from '@tiptap/extension-text-align';
 import { Typography } from '@tiptap/extension-typography';
-import { Selection } from '@tiptap/extensions';
+import { Placeholder, Selection } from '@tiptap/extensions';
 import { EditorContent, EditorContext, useEditor } from '@tiptap/react';
 // --- Tiptap Core Extensions ---
 import { StarterKit } from '@tiptap/starter-kit';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import * as Y from 'yjs';
 
 import { DocumentHeader } from '@/components/document-header';
 // --- Icons ---
@@ -58,9 +57,11 @@ import { UndoRedoButton } from '@/components/tiptap-ui/undo-redo-button';
 import '@/components/tiptap-templates/simple/simple-editor.scss';
 
 import { useCursorVisibility } from '@/hooks/use-cursor-visibility';
-import type { DocumentSummary } from '@/hooks/use-documents.hook';
+import { useDocumentSync } from '@/hooks/use-document-sync.hook';
+import { canEditDocument, type DocumentSummary } from '@/hooks/use-documents.hook';
 // --- Hooks ---
 import { useIsBreakpoint } from '@/hooks/use-is-breakpoint';
+import { useAuthenticatedSession } from '@/hooks/use-session.hook';
 import { useWindowSize } from '@/hooks/use-window-size';
 // --- Lib ---
 import { handleImageUpload, MAX_FILE_SIZE } from '@/lib/tiptap-utils';
@@ -164,7 +165,12 @@ const MobileToolbarContent = ({
 	</>
 );
 
-export function SimpleEditor({ document }: { document: DocumentSummary }) {
+interface SimpleEditorProps {
+	document: DocumentSummary;
+	content: Uint8Array;
+}
+
+export function SimpleEditor({ document, content }: SimpleEditorProps) {
 	const isMobile = useIsBreakpoint();
 	const { height } = useWindowSize();
 	const [mobileView, setMobileView] = useState<'main' | 'highlighter' | 'link'>('main');
@@ -172,10 +178,14 @@ export function SimpleEditor({ document }: { document: DocumentSummary }) {
 	const toolbarRef = useRef<HTMLDivElement>(null);
 	const searchAndReplaceButtonRef = useRef<HTMLButtonElement>(null);
 
-	const [ydoc] = useState(() => new Y.Doc());
+	const { user } = useAuthenticatedSession();
+	const role = document.members.find((member) => member.userId === user.id)?.role;
+	const canEdit = canEditDocument(role);
+	const { ydoc, saveStatus } = useDocumentSync(document._id, content);
 
 	const editor = useEditor({
 		immediatelyRender: false,
+		editable: canEdit,
 		editorProps: {
 			attributes: {
 				autocomplete: 'off',
@@ -204,6 +214,7 @@ export function SimpleEditor({ document }: { document: DocumentSummary }) {
 			Superscript,
 			Subscript,
 			Selection,
+			Placeholder.configure({ placeholder: 'Start writing…' }),
 			FindAndReplace.configure({
 				searchDebounceMs: 500,
 				injectCSS: false,
@@ -256,6 +267,7 @@ export function SimpleEditor({ document }: { document: DocumentSummary }) {
 			<EditorContext.Provider value={{ editor }}>
 				<DocumentHeader
 					document={document}
+					saveStatus={canEdit ? saveStatus : undefined}
 					onTitleDone={() => editor?.commands.focus()}
 					isSearchAndReplaceOpen={isSearchAndReplaceOpen}
 					onSearchAndReplaceClick={toggleSearchAndReplace}

@@ -4,12 +4,15 @@ import { Link } from 'react-router';
 
 import { AppAvatar } from '@/components/app-avatar';
 import { DocumentTitleInput } from '@/components/document-title-input';
+import { SaveStatusIndicator } from '@/components/save-status-indicator';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button, buttonVariants } from '@/components/ui/button';
 import type { DocumentSummary } from '@/hooks/use-documents.hook';
+import type { SaveStatus } from '@/lib/document-sync.lib';
 
 interface DocumentHeaderProps {
 	document: DocumentSummary;
+	saveStatus?: SaveStatus;
 	onTitleDone: () => void;
 	isSearchAndReplaceOpen: boolean;
 	onSearchAndReplaceClick: () => void;
@@ -18,6 +21,7 @@ interface DocumentHeaderProps {
 
 export const DocumentHeader = ({
 	document,
+	saveStatus,
 	onTitleDone,
 	isSearchAndReplaceOpen,
 	onSearchAndReplaceClick,
@@ -41,6 +45,7 @@ export const DocumentHeader = ({
 		</div>
 
 		<div className="flex shrink-0 items-center gap-1">
+			{saveStatus && <SaveStatusIndicator status={saveStatus} />}
 			<Button
 				ref={searchAndReplaceButtonRef}
 				variant="ghost"

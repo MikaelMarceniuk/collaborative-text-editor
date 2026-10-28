@@ -18,7 +18,7 @@ import {
 	EmptyMedia,
 	EmptyTitle,
 } from '@/components/ui/empty';
-import { useDocument } from '@/hooks/use-documents.hook';
+import { useDocument, useDocumentContent } from '@/hooks/use-documents.hook';
 
 const useDocumentTitle = (title: string | undefined) => {
 	useEffect(() => {
@@ -44,10 +44,12 @@ export const DocumentEditorPage = () => {
 	const { id } = useParams<'id'>();
 	const { document, isDocumentPending, isDocumentError, isDocumentNotFound, refetchDocument } =
 		useDocument(id!);
+	const { content, isContentPending, isContentError, isContentNotFound, refetchContent } =
+		useDocumentContent(id!);
 
 	useDocumentTitle(document?.title);
 
-	if (isDocumentPending) {
+	if (isDocumentPending || isContentPending) {
 		return (
 			<div className="flex min-h-svh items-center justify-center gap-2 text-sm text-muted-foreground">
 				<IconLoader2 className="size-4 animate-spin" />
@@ -56,7 +58,7 @@ export const DocumentEditorPage = () => {
 		);
 	}
 
-	if (isDocumentNotFound) {
+	if (isDocumentNotFound || isContentNotFound) {
 		return (
 			<Empty className="min-h-svh">
 				<EmptyHeader>
@@ -73,7 +75,7 @@ export const DocumentEditorPage = () => {
 		);
 	}
 
-	if (isDocumentError || !document) {
+	if (isDocumentError || isContentError || !document || !content) {
 		return (
 			<Empty className="min-h-svh">
 				<EmptyHeader>
@@ -85,7 +87,13 @@ export const DocumentEditorPage = () => {
 				</EmptyHeader>
 				<EmptyContent className="flex-row justify-center">
 					{backToDocumentsLink}
-					<Button size="sm" onClick={() => void refetchDocument()}>
+					<Button
+						size="sm"
+						onClick={() => {
+							if (isDocumentError) void refetchDocument();
+							if (isContentError) void refetchContent();
+						}}
+					>
 						<IconRefresh />
 						Try again
 					</Button>
@@ -94,5 +102,5 @@ export const DocumentEditorPage = () => {
 		);
 	}
 
-	return <SimpleEditor key={document._id} document={document} />;
+	return <SimpleEditor key={document._id} document={document} content={content} />;
 };
