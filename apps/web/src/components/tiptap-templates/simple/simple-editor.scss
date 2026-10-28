@@ -2,6 +2,7 @@
 
 body {
 	--tt-toolbar-height: 44px;
+	--document-header-height: 3.5rem;
 	--tt-theme-text: var(--tt-gray-light-900);
 
 	.dark & {
@@ -61,11 +62,19 @@ body,
 }
 
 .simple-editor-search-and-replace {
+	--simple-editor-top-bars-height: calc(var(--document-header-height) + var(--tt-toolbar-height));
+
 	position: fixed;
-	top: calc(var(--tt-toolbar-height) + 0.5rem);
+	top: calc(var(--simple-editor-top-bars-height) + 0.5rem);
 	right: 0.5rem;
 	z-index: 51;
-	max-height: calc(100dvh - var(--tt-toolbar-height) - 1rem);
+	max-height: calc(100dvh - var(--simple-editor-top-bars-height) - 1rem);
+}
+
+@media screen and (min-width: 481px) {
+	.simple-editor-wrapper .simple-editor-toolbar[data-variant='fixed'] {
+		top: var(--document-header-height);
+	}
 }
 
 .simple-editor-content {
@@ -85,10 +94,10 @@ body,
 
 @media screen and (max-width: 480px) {
 	.simple-editor-search-and-replace {
-		top: 0.5rem;
+		top: calc(var(--document-header-height) + 0.5rem);
 		left: 0.5rem;
 		width: auto;
-		max-height: calc(100dvh - 1rem);
+		max-height: calc(100dvh - var(--document-header-height) - 1rem);
 	}
 
 	.simple-editor-content .tiptap.ProseMirror.simple-editor {

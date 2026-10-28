@@ -1,4 +1,4 @@
-import { IconDots, IconFileText, IconShare, IconTrash } from '@tabler/icons-react';
+import { IconDots, IconFileText, IconPencil, IconShare, IconTrash } from '@tabler/icons-react';
 import type { SyntheticEvent } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -11,7 +11,11 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type { DocumentRole, DocumentSummary } from '@/hooks/use-documents.hook';
+import {
+	canEditDocument,
+	type DocumentRole,
+	type DocumentSummary,
+} from '@/hooks/use-documents.hook';
 import { useAuthenticatedSession } from '@/hooks/use-session.hook';
 import { formatRelativeTime } from '@/lib/date.lib';
 
@@ -27,10 +31,11 @@ const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
 
 interface DocumentItemProps {
 	document: DocumentSummary;
+	onRename: (document: DocumentSummary) => void;
 	onDelete: (document: DocumentSummary) => void;
 }
 
-export const DocumentItem = ({ document, onDelete }: DocumentItemProps) => {
+export const DocumentItem = ({ document, onRename, onDelete }: DocumentItemProps) => {
 	const { user } = useAuthenticatedSession();
 	const navigate = useNavigate();
 
@@ -66,6 +71,10 @@ export const DocumentItem = ({ document, onDelete }: DocumentItemProps) => {
 					</DropdownMenuTrigger>
 
 					<DropdownMenuContent align="end" className="w-40">
+						<DropdownMenuItem disabled={!canEditDocument(role)} onClick={() => onRename(document)}>
+							<IconPencil />
+							Rename
+						</DropdownMenuItem>
 						<DropdownMenuItem disabled>
 							<IconShare />
 							Share

@@ -14,7 +14,7 @@ import { EditorContent, EditorContext, useEditor } from '@tiptap/react';
 import { StarterKit } from '@tiptap/starter-kit';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { AppAvatar } from '@/components/app-avatar';
+import { DocumentHeader } from '@/components/document-header';
 // --- Icons ---
 import { ArrowLeftIcon } from '@/components/tiptap-icons/arrow-left-icon';
 import { HighlighterIcon } from '@/components/tiptap-icons/highlighter-icon';
@@ -32,8 +32,6 @@ import '@/components/tiptap-node/paragraph-node/paragraph-node.scss';
 // --- Tiptap Node ---
 import { ImageUploadNode } from '@/components/tiptap-node/image-upload-node/image-upload-node-extension';
 import content from '@/components/tiptap-templates/simple/data/content.json';
-// --- Components ---
-import { ThemeToggle } from '@/components/tiptap-templates/simple/theme-toggle';
 // --- UI Primitives ---
 import { Button } from '@/components/tiptap-ui-primitive/button';
 import { Spacer } from '@/components/tiptap-ui-primitive/spacer';
@@ -51,13 +49,11 @@ import { ImageUploadButton } from '@/components/tiptap-ui/image-upload-button';
 import { LinkPopover, LinkContent, LinkButton } from '@/components/tiptap-ui/link-popover';
 import { ListDropdownMenu } from '@/components/tiptap-ui/list-dropdown-menu';
 import { MarkButton } from '@/components/tiptap-ui/mark-button';
-import {
-	SearchAndReplace,
-	SearchAndReplaceButton,
-} from '@/components/tiptap-ui/search-and-replace';
+import { SearchAndReplace } from '@/components/tiptap-ui/search-and-replace';
 import { TextAlignButton } from '@/components/tiptap-ui/text-align-button';
 import { UndoRedoButton } from '@/components/tiptap-ui/undo-redo-button';
 import { useCursorVisibility } from '@/hooks/use-cursor-visibility';
+import type { DocumentSummary } from '@/hooks/use-documents.hook';
 
 // --- Styles ---
 import '@/components/tiptap-templates/simple/simple-editor.scss';
@@ -75,16 +71,10 @@ const SEARCH_AND_REPLACE_SCROLL_OPTIONS: ScrollIntoViewOptions = {
 const MainToolbarContent = ({
 	onHighlighterClick,
 	onLinkClick,
-	onSearchAndReplaceClick,
-	isSearchAndReplaceOpen,
-	searchAndReplaceButtonRef,
 	isMobile,
 }: {
 	onHighlighterClick: () => void;
 	onLinkClick: () => void;
-	onSearchAndReplaceClick: () => void;
-	isSearchAndReplaceOpen: boolean;
-	searchAndReplaceButtonRef: React.RefObject<HTMLButtonElement | null>;
 	isMobile: boolean;
 }) => {
 	return (
@@ -144,20 +134,6 @@ const MainToolbarContent = ({
 			</ToolbarGroup>
 
 			<Spacer />
-
-			{isMobile && <ToolbarSeparator />}
-
-			<ToolbarGroup>
-				<SearchAndReplaceButton
-					ref={searchAndReplaceButtonRef}
-					aria-expanded={isSearchAndReplaceOpen}
-					data-active-state={isSearchAndReplaceOpen ? 'on' : 'off'}
-					onClick={onSearchAndReplaceClick}
-				/>
-				<ThemeToggle />
-
-				<AppAvatar />
-			</ToolbarGroup>
 		</>
 	);
 };
@@ -187,7 +163,7 @@ const MobileToolbarContent = ({
 	</>
 );
 
-export function SimpleEditor() {
+export function SimpleEditor({ document }: { document: DocumentSummary }) {
 	const isMobile = useIsBreakpoint();
 	const { height } = useWindowSize();
 	const [mobileView, setMobileView] = useState<'main' | 'highlighter' | 'link'>('main');
@@ -272,8 +248,17 @@ export function SimpleEditor() {
 	return (
 		<div className="simple-editor-wrapper">
 			<EditorContext.Provider value={{ editor }}>
+				<DocumentHeader
+					document={document}
+					onTitleDone={() => editor?.commands.focus()}
+					isSearchAndReplaceOpen={isSearchAndReplaceOpen}
+					onSearchAndReplaceClick={toggleSearchAndReplace}
+					searchAndReplaceButtonRef={searchAndReplaceButtonRef}
+				/>
+
 				<Toolbar
 					ref={toolbarRef}
+					className="simple-editor-toolbar"
 					style={{
 						...(isMobile
 							? {
@@ -286,9 +271,6 @@ export function SimpleEditor() {
 						<MainToolbarContent
 							onHighlighterClick={() => setMobileView('highlighter')}
 							onLinkClick={() => setMobileView('link')}
-							onSearchAndReplaceClick={toggleSearchAndReplace}
-							isSearchAndReplaceOpen={isSearchAndReplaceOpen}
-							searchAndReplaceButtonRef={searchAndReplaceButtonRef}
 							isMobile={isMobile}
 						/>
 					) : (

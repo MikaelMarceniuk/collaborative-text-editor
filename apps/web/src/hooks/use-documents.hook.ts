@@ -1,6 +1,6 @@
 import { queryOptions, useQuery } from '@tanstack/react-query';
 
-import { apiFetch } from '@/lib/api.lib';
+import { ApiError, apiFetch } from '@/lib/api.lib';
 
 import { useAuthenticatedSession } from './use-session.hook';
 
@@ -23,7 +23,13 @@ export interface DocumentSummary {
 export const documentsQueryKeys = {
 	all: ['documents'] as const,
 	list: (userId: string) => ['documents', userId] as const,
+	detail: (userId: string, documentId: string) => ['documents', userId, documentId] as const,
 };
+
+export const DOCUMENT_TITLE_MAX_LENGTH = 200;
+
+export const canEditDocument = (role: DocumentRole | undefined) =>
+	role === 'owner' || role === 'editor';
 
 const fetchDocuments = async ({ signal }: { signal: AbortSignal }) => {
 	const { documents } = await apiFetch<{ documents: DocumentSummary[] }>('/documents', { signal });
@@ -45,5 +51,37 @@ export const useDocuments = () => {
 		isDocumentsPending: isPending || (isError && isFetching),
 		isDocumentsError: isError && !isFetching,
 		refetchDocuments: refetch,
+	};
+};
+
+const fetchDocument = async (documentId: string, signal: AbortSignal) => {
+	const { document } = await apiFetch<{ document: DocumentSummary }>(`/documents/${documentId}`, {
+		signal,
+	});
+
+	return document;
+};
+
+const isNotFoundError = (error: Error | null) => error instanceof ApiError && error.status === 404;
+
+export const documentQueryOptions = (userId: string, documentId: string) =>
+	queryOptions({
+		queryKey: documentsQueryKeys.detail(userId, documentId),
+		queryFn: ({ signal }) => fetchDocument(documentId, signal),
+		retry: (failureCount, error) => !isNotFoundError(error) && failureCount < 3,
+	});
+
+export const useDocument = (documentId: string) => {
+	const { user } = useAuthenticatedSession();
+	const { data, error, isPending, isError, isFetching, refetch } = useQuery(
+		documentQueryOptions(user.id, documentId),
+	);
+
+	return {
+		document: data,
+		isDocumentPending: isPending || (isError && isFetching),
+		isDocumentError: isError && !isFetching,
+		isDocumentNotFound: isNotFoundError(error),
+		refetchDocument: refetch,
 	};
 };
