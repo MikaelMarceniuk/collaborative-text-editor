@@ -13,6 +13,7 @@ export interface DocumentModel {
 	ownerId: ObjectId;
 	members: DocumentMember[];
 	ydocState?: Binary;
+	contentVersion?: number;
 	createdAt: Date;
 	updatedAt: Date;
 }
