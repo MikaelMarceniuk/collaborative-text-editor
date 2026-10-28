@@ -1,6 +1,8 @@
 import { IconSpy } from '@tabler/icons-react';
 import { cn } from 'cn';
+import { Link } from 'react-router';
 
+import { CheckEmail } from '@/components/check-email';
 import { Button } from '@/components/ui/button';
 import {
 	Field,
@@ -11,12 +13,36 @@ import {
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { useContinueAsGuest } from '@/hooks/use-continue-as-guest.hook';
+import { useSignInEmail } from '@/hooks/use-sign-in-email.hook';
 
 export const SignInForm: React.FC<React.ComponentProps<'form'>> = ({ className, ...props }) => {
 	const { handleGuestSignIn, isGuestPending } = useContinueAsGuest();
+	const { handleSignIn, isSignInPending, unverifiedEmail, resetSignIn } = useSignInEmail();
+
+	if (unverifiedEmail) {
+		return (
+			<CheckEmail
+				email={unverifiedEmail}
+				title="Verify your email"
+				description="Your email isn't verified yet. We sent a new link to"
+				backLabel="Back to sign in"
+				onBack={resetSignIn}
+			/>
+		);
+	}
+
+	const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+		event.preventDefault();
+
+		const formData = new FormData(event.currentTarget);
+		handleSignIn({
+			email: String(formData.get('email')).trim(),
+			password: String(formData.get('password')),
+		});
+	};
 
 	return (
-		<form className={cn('flex flex-col gap-6', className)} {...props}>
+		<form className={cn('flex flex-col gap-6', className)} onSubmit={handleSubmit} {...props}>
 			<FieldGroup>
 				<div className="flex flex-col items-center gap-1 text-center">
 					<h1 className="text-2xl font-bold">Login to your account</h1>
@@ -26,19 +52,29 @@ export const SignInForm: React.FC<React.ComponentProps<'form'>> = ({ className, 
 				</div>
 				<Field>
 					<FieldLabel htmlFor="email">Email</FieldLabel>
-					<Input id="email" type="email" placeholder="m@example.com" required />
+					<Input
+						id="email"
+						name="email"
+						type="email"
+						autoComplete="email"
+						placeholder="m@example.com"
+						required
+					/>
 				</Field>
 				<Field>
-					<div className="flex items-center">
-						<FieldLabel htmlFor="password">Password</FieldLabel>
-						<a href="#" className="ml-auto text-sm underline-offset-4 hover:underline">
-							Forgot your password?
-						</a>
-					</div>
-					<Input id="password" type="password" required />
+					<FieldLabel htmlFor="password">Password</FieldLabel>
+					<Input
+						id="password"
+						name="password"
+						type="password"
+						autoComplete="current-password"
+						required
+					/>
 				</Field>
 				<Field>
-					<Button type="submit">Login</Button>
+					<Button type="submit" disabled={isSignInPending}>
+						Login
+					</Button>
 				</Field>
 				<FieldSeparator>Or continue with</FieldSeparator>
 				<Field>
@@ -52,10 +88,7 @@ export const SignInForm: React.FC<React.ComponentProps<'form'>> = ({ className, 
 						Continue as guest
 					</Button>
 					<FieldDescription className="text-center">
-						Don&apos;t have an account?{' '}
-						<a href="#" className="underline underline-offset-4">
-							Sign up
-						</a>
+						Don&apos;t have an account? <Link to="/sign-up">Sign up</Link>
 					</FieldDescription>
 				</Field>
 			</FieldGroup>

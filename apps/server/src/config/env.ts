@@ -14,6 +14,9 @@ const envSchema = z.object({
 	BETTER_AUTH_SECRET: z.string().min(32),
 	BETTER_AUTH_URL: z.url(),
 
+	RESEND_API_KEY: z.string().startsWith('re_'),
+	MAIL_FROM: z.string().default('Collaborative Editor <onboarding@resend.dev>'),
+
 	WEB_URL: z.url().default('http://localhost:5173'),
 });
 

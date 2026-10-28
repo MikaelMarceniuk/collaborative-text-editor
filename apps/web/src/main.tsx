@@ -6,6 +6,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router';
 import './index.css';
 import { AuthGuard } from './components/guards/auth.guard';
 import { GuestGuard } from './components/guards/guest.guard';
+import { AuthLayout } from './components/layouts/auth.layout';
 import { ThemeProvider } from './components/providers/theme-provider';
 import { SessionFallback } from './components/session-fallback';
 import { Toaster } from './components/ui/toast';
@@ -14,6 +15,8 @@ import { sessionLoader } from './loaders/session.loader';
 import { DocumentEditorPage } from './pages/document-editor.page';
 import { RootPage } from './pages/root.page';
 import { SignInPage } from './pages/sign-in.page';
+import { SignUpPage } from './pages/sign-up.page';
+import { VerifyEmailPage } from './pages/verify-email.page';
 
 const router = createBrowserRouter([
 	{
@@ -28,7 +31,19 @@ const router = createBrowserRouter([
 					{ path: '/:id', element: <DocumentEditorPage /> },
 				],
 			},
-			{ element: <GuestGuard />, children: [{ path: '/sign-in', element: <SignInPage /> }] },
+			{
+				element: <AuthLayout />,
+				children: [
+					{
+						element: <GuestGuard />,
+						children: [
+							{ path: '/sign-in', element: <SignInPage /> },
+							{ path: '/sign-up', element: <SignUpPage /> },
+						],
+					},
+					{ path: '/verify-email', element: <VerifyEmailPage /> },
+				],
+			},
 		],
 	},
 ]);
