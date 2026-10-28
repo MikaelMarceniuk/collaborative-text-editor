@@ -9,6 +9,7 @@ import { ThemeProvider } from './components/providers/theme-provider';
 import { SessionFallback } from './components/session-fallback';
 import { Toaster } from './components/ui/toast';
 import { sessionLoader } from './loaders/session.loader';
+import { DocumentEditorPage } from './pages/document-editor.page';
 import { RootPage } from './pages/root.page';
 import { SignInPage } from './pages/sign-in.page';
 
@@ -18,7 +19,13 @@ const router = createBrowserRouter([
 		loader: sessionLoader,
 		HydrateFallback: SessionFallback,
 		children: [
-			{ element: <AuthGuard />, children: [{ path: '/', element: <RootPage /> }] },
+			{
+				element: <AuthGuard />,
+				children: [
+					{ path: '/', element: <RootPage /> },
+					{ path: '/:id', element: <DocumentEditorPage /> },
+				],
+			},
 			{ element: <GuestGuard />, children: [{ path: '/sign-in', element: <SignInPage /> }] },
 		],
 	},
