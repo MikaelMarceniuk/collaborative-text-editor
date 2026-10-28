@@ -1,6 +1,10 @@
+import { Link } from 'react-router';
+
 import { AppAvatar } from '@/components/app-avatar';
 import { DocumentList } from '@/components/document-list';
+import { GuestNotice } from '@/components/guest-notice';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { buttonVariants } from '@/components/ui/button';
 import {
 	Card,
 	CardAction,
@@ -35,7 +39,21 @@ export const RootPage = () => {
 					</CardAction>
 				</CardHeader>
 
-				<CardContent>
+				<CardContent className="flex flex-col gap-4">
+					{user.isAnonymous && (
+						<GuestNotice
+							action={
+								<Link
+									to="/sign-up"
+									className={buttonVariants({ size: 'sm', className: 'shrink-0' })}
+								>
+									Create account
+								</Link>
+							}
+						>
+							You&apos;re using a guest account. Create an account to keep your documents.
+						</GuestNotice>
+					)}
 					<DocumentList
 						documents={documents}
 						isPending={isDocumentsPending}

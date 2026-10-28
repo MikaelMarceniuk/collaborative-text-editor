@@ -3,6 +3,7 @@ import { IconArrowLeft, IconMailCheck } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import { Field, FieldGroup } from '@/components/ui/field';
 import { useResendVerificationEmail } from '@/hooks/use-resend-verification-email.hook';
+import { useIsGuest } from '@/hooks/use-session.hook';
 
 interface CheckEmailProps {
 	email: string;
@@ -19,6 +20,7 @@ export const CheckEmail: React.FC<CheckEmailProps> = ({
 	backLabel,
 	onBack,
 }) => {
+	const isGuest = useIsGuest();
 	const { handleResend, isResendPending, resendCooldown } = useResendVerificationEmail({
 		justSent: true,
 	});
@@ -34,6 +36,11 @@ export const CheckEmail: React.FC<CheckEmailProps> = ({
 					{description} <span className="font-medium break-all text-foreground">{email}</span>. The
 					link expires in 1 hour.
 				</p>
+				{isGuest && (
+					<p className="text-sm text-balance text-muted-foreground">
+						Open the link in this browser to bring your guest documents along.
+					</p>
+				)}
 			</div>
 			<Field>
 				<Button

@@ -4,8 +4,8 @@ import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 
 import './index.css';
+import { AccountlessGuard } from './components/guards/accountless.guard';
 import { AuthGuard } from './components/guards/auth.guard';
-import { GuestGuard } from './components/guards/guest.guard';
 import { AuthLayout } from './components/layouts/auth.layout';
 import { ThemeProvider } from './components/providers/theme-provider';
 import { SessionFallback } from './components/session-fallback';
@@ -35,7 +35,7 @@ const router = createBrowserRouter([
 				element: <AuthLayout />,
 				children: [
 					{
-						element: <GuestGuard />,
+						element: <AccountlessGuard />,
 						children: [
 							{ path: '/sign-in', element: <SignInPage /> },
 							{ path: '/sign-up', element: <SignUpPage /> },

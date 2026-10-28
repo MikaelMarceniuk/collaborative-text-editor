@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 
 import { CheckEmail } from '@/components/check-email';
+import { GuestUpgradeNotice } from '@/components/guest-upgrade-notice';
 import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -53,6 +54,7 @@ export const SignUpForm: React.FC<React.ComponentProps<'form'>> = ({ className, 
 						We&apos;ll send you a link to verify your email
 					</p>
 				</div>
+				<GuestUpgradeNotice flow="sign-up" />
 				<Field>
 					<FieldLabel htmlFor="name">Name</FieldLabel>
 					<Input id="name" name="name" autoComplete="name" required maxLength={100} />

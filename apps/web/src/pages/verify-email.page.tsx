@@ -2,7 +2,7 @@ import { IconCircleCheck } from '@tabler/icons-react';
 import { Link, useSearchParams } from 'react-router';
 
 import { ResendVerificationForm } from '@/components/forms/resend-verification.form';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { Field, FieldGroup } from '@/components/ui/field';
 import { useSession } from '@/hooks/use-session.hook';
 
@@ -37,9 +37,9 @@ export const VerifyEmailPage = () => {
 				</p>
 			</div>
 			<Field>
-				<Button nativeButton={false} render={<Link to={session ? '/' : '/sign-in'} />}>
+				<Link to={session ? '/' : '/sign-in'} className={buttonVariants()}>
 					{session ? 'Go to my documents' : 'Sign in'}
-				</Button>
+				</Link>
 			</Field>
 		</FieldGroup>
 	);

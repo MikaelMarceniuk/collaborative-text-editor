@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router';
 import { toast } from '@/components/ui/toast';
 import { apiFetch } from '@/lib/api.lib';
 
-import { DOCUMENTS_QUERY_KEY, type DocumentSummary } from './use-documents.hook';
+import { documentsQueryKeys, type DocumentSummary } from './use-documents.hook';
 
 export const useCreateDocument = () => {
 	const navigate = useNavigate();
@@ -19,7 +19,7 @@ export const useCreateDocument = () => {
 			return document;
 		},
 		onSuccess: async (document) => {
-			void queryClient.invalidateQueries({ queryKey: DOCUMENTS_QUERY_KEY });
+			void queryClient.invalidateQueries({ queryKey: documentsQueryKeys.all });
 			await navigate(`/${document._id}`);
 		},
 		onError: () => {

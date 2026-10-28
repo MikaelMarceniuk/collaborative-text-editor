@@ -4,6 +4,8 @@ import { useRevalidator } from 'react-router';
 import { toast } from '@/components/ui/toast';
 import { authClient, EMAIL_VERIFICATION_CALLBACK_URL } from '@/lib/auth-client.lib';
 
+import { useIsGuest } from './use-session.hook';
+
 export interface SignInEmailInput {
 	email: string;
 	password: string;
@@ -11,10 +13,13 @@ export interface SignInEmailInput {
 
 export const useSignInEmail = () => {
 	const { revalidate } = useRevalidator();
+	const isGuest = useIsGuest();
 	const [isSignInPending, startSignInTransition] = useTransition();
 	const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
 
 	const handleSignIn = (input: SignInEmailInput) => {
+		const wasGuest = isGuest;
+
 		startSignInTransition(async () => {
 			const showError = (description?: string) =>
 				toast.add({
@@ -25,17 +30,27 @@ export const useSignInEmail = () => {
 
 			let result: Awaited<ReturnType<typeof authClient.signIn.email>>;
 			try {
-				// The callback URL is only used by the link the server resends to unverified users.
-				result = await authClient.signIn.email({
-					...input,
-					callbackURL: EMAIL_VERIFICATION_CALLBACK_URL,
-				});
+				result = await authClient.signIn.email(input);
 			} catch {
 				showError('Could not reach the server. Please try again.');
 				return;
 			}
 
 			if (result.error?.code === 'EMAIL_NOT_VERIFIED') {
+				const resent = await authClient
+					.sendVerificationEmail({
+						email: input.email,
+						callbackURL: EMAIL_VERIFICATION_CALLBACK_URL,
+					})
+					.catch(() => null);
+
+				if (!resent || resent.error) {
+					showError(
+						"Your email isn't verified yet, and we could not send a new link. Please try again.",
+					);
+					return;
+				}
+
 				setUnverifiedEmail(input.email);
 				return;
 			}
@@ -43,6 +58,14 @@ export const useSignInEmail = () => {
 			if (result.error) {
 				showError(result.error.message);
 				return;
+			}
+
+			if (wasGuest) {
+				toast.add({
+					type: 'success',
+					title: 'Signed in',
+					description: 'Your guest documents were added to your account.',
+				});
 			}
 
 			await revalidate();

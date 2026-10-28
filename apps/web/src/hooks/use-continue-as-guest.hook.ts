@@ -1,11 +1,12 @@
 import { useTransition } from 'react';
-import { useRevalidator } from 'react-router';
+import { useNavigate, useRevalidator } from 'react-router';
 
 import { toast } from '@/components/ui/toast';
 import { authClient } from '@/lib/auth-client.lib';
 
 export const useContinueAsGuest = () => {
 	const { revalidate } = useRevalidator();
+	const navigate = useNavigate();
 	const [isGuestPending, startGuestTransition] = useTransition();
 
 	const handleGuestSignIn = () => {
@@ -37,6 +38,7 @@ export const useContinueAsGuest = () => {
 			});
 
 			await revalidate();
+			await navigate('/', { replace: true });
 		});
 	};
 

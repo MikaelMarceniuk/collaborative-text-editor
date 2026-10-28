@@ -1,6 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
+import { queryOptions, useQuery } from '@tanstack/react-query';
 
 import { apiFetch } from '@/lib/api.lib';
+
+import { useAuthenticatedSession } from './use-session.hook';
 
 export type DocumentRole = 'owner' | 'editor' | 'viewer';
 
@@ -18,23 +20,28 @@ export interface DocumentSummary {
 	updatedAt: string;
 }
 
-export const DOCUMENTS_QUERY_KEY = ['documents'];
+export const documentsQueryKeys = {
+	all: ['documents'] as const,
+	list: (userId: string) => ['documents', userId] as const,
+};
+
+const fetchDocuments = async ({ signal }: { signal: AbortSignal }) => {
+	const { documents } = await apiFetch<{ documents: DocumentSummary[] }>('/documents', { signal });
+
+	return documents;
+};
+
+export const documentsQueryOptions = (userId: string) =>
+	queryOptions({ queryKey: documentsQueryKeys.list(userId), queryFn: fetchDocuments });
 
 export const useDocuments = () => {
-	const { data, isPending, isError, isFetching, refetch } = useQuery({
-		queryKey: DOCUMENTS_QUERY_KEY,
-		queryFn: async ({ signal }) => {
-			const { documents } = await apiFetch<{ documents: DocumentSummary[] }>('/documents', {
-				signal,
-			});
-
-			return documents;
-		},
-	});
+	const { user } = useAuthenticatedSession();
+	const { data, isPending, isError, isFetching, refetch } = useQuery(
+		documentsQueryOptions(user.id),
+	);
 
 	return {
 		documents: data ?? [],
-		// A retry after an error keeps the "error" status, so treat it as pending to show the skeleton.
 		isDocumentsPending: isPending || (isError && isFetching),
 		isDocumentsError: isError && !isFetching,
 		refetchDocuments: refetch,

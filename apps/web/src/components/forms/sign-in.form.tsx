@@ -3,6 +3,7 @@ import { cn } from 'cn';
 import { Link } from 'react-router';
 
 import { CheckEmail } from '@/components/check-email';
+import { GuestUpgradeNotice } from '@/components/guest-upgrade-notice';
 import { Button } from '@/components/ui/button';
 import {
 	Field,
@@ -13,9 +14,11 @@ import {
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { useContinueAsGuest } from '@/hooks/use-continue-as-guest.hook';
+import { useIsGuest } from '@/hooks/use-session.hook';
 import { useSignInEmail } from '@/hooks/use-sign-in-email.hook';
 
 export const SignInForm: React.FC<React.ComponentProps<'form'>> = ({ className, ...props }) => {
+	const isGuest = useIsGuest();
 	const { handleGuestSignIn, isGuestPending } = useContinueAsGuest();
 	const { handleSignIn, isSignInPending, unverifiedEmail, resetSignIn } = useSignInEmail();
 
@@ -50,6 +53,7 @@ export const SignInForm: React.FC<React.ComponentProps<'form'>> = ({ className, 
 						Enter your email below to login to your account
 					</p>
 				</div>
+				<GuestUpgradeNotice flow="sign-in" />
 				<Field>
 					<FieldLabel htmlFor="email">Email</FieldLabel>
 					<Input
@@ -76,17 +80,20 @@ export const SignInForm: React.FC<React.ComponentProps<'form'>> = ({ className, 
 						Login
 					</Button>
 				</Field>
-				<FieldSeparator>Or continue with</FieldSeparator>
+				{/* A guest can't start another guest session (the server rejects it). */}
+				{!isGuest && <FieldSeparator>Or continue with</FieldSeparator>}
 				<Field>
-					<Button
-						variant="outline"
-						type="button"
-						disabled={isGuestPending}
-						onClick={handleGuestSignIn}
-					>
-						<IconSpy />
-						Continue as guest
-					</Button>
+					{!isGuest && (
+						<Button
+							variant="outline"
+							type="button"
+							disabled={isGuestPending}
+							onClick={handleGuestSignIn}
+						>
+							<IconSpy />
+							Continue as guest
+						</Button>
+					)}
 					<FieldDescription className="text-center">
 						Don&apos;t have an account? <Link to="/sign-up">Sign up</Link>
 					</FieldDescription>
