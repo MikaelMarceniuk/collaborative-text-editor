@@ -14,13 +14,12 @@ import { EditorContent, EditorContext, useEditor } from '@tiptap/react';
 import { StarterKit } from '@tiptap/starter-kit';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { AppAvatar } from '@/components/app-avatar';
 // --- Icons ---
 import { ArrowLeftIcon } from '@/components/tiptap-icons/arrow-left-icon';
 import { HighlighterIcon } from '@/components/tiptap-icons/highlighter-icon';
 import { LinkIcon } from '@/components/tiptap-icons/link-icon';
 import { HorizontalRule } from '@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension';
-// --- Tiptap Node ---
-import { ImageUploadNode } from '@/components/tiptap-node/image-upload-node/image-upload-node-extension';
 
 import '@/components/tiptap-node/blockquote-node/blockquote-node.scss';
 import '@/components/tiptap-node/code-block-node/code-block-node.scss';
@@ -30,6 +29,8 @@ import '@/components/tiptap-node/image-node/image-node.scss';
 import '@/components/tiptap-node/heading-node/heading-node.scss';
 import '@/components/tiptap-node/paragraph-node/paragraph-node.scss';
 
+// --- Tiptap Node ---
+import { ImageUploadNode } from '@/components/tiptap-node/image-upload-node/image-upload-node-extension';
 import content from '@/components/tiptap-templates/simple/data/content.json';
 // --- Components ---
 import { ThemeToggle } from '@/components/tiptap-templates/simple/theme-toggle';
@@ -57,13 +58,13 @@ import {
 import { TextAlignButton } from '@/components/tiptap-ui/text-align-button';
 import { UndoRedoButton } from '@/components/tiptap-ui/undo-redo-button';
 import { useCursorVisibility } from '@/hooks/use-cursor-visibility';
-// --- Hooks ---
-import { useIsBreakpoint } from '@/hooks/use-is-breakpoint';
-import { useWindowSize } from '@/hooks/use-window-size';
 
 // --- Styles ---
 import '@/components/tiptap-templates/simple/simple-editor.scss';
 
+// --- Hooks ---
+import { useIsBreakpoint } from '@/hooks/use-is-breakpoint';
+import { useWindowSize } from '@/hooks/use-window-size';
 // --- Lib ---
 import { handleImageUpload, MAX_FILE_SIZE } from '@/lib/tiptap-utils';
 
@@ -154,6 +155,8 @@ const MainToolbarContent = ({
 					onClick={onSearchAndReplaceClick}
 				/>
 				<ThemeToggle />
+
+				<AppAvatar />
 			</ToolbarGroup>
 		</>
 	);

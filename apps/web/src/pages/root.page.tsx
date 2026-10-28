@@ -2,7 +2,7 @@ import { IconLogout } from '@tabler/icons-react';
 
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
-import { useSession } from '@/hooks/use-session.hook';
+import { useAuthenticatedSession } from '@/hooks/use-session.hook';
 import { useSignOut } from '@/hooks/use-sign-out.hook';
 
 type InfoListProps = { title: string; items: [string, React.ReactNode][] };
@@ -22,7 +22,7 @@ const InfoList: React.FC<InfoListProps> = ({ title, items }) => (
 );
 
 export const RootPage = () => {
-	const { user, session } = useSession()!;
+	const { user, session } = useAuthenticatedSession();
 	const { handleSignOut, isSignOutPending } = useSignOut();
 
 	return (

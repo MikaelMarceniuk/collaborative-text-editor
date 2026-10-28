@@ -23,7 +23,7 @@ const useToolbarNavigation = (toolbarRef: React.RefObject<HTMLDivElement | null>
 			toolbarRef.current.querySelectorAll<HTMLElement>(
 				'button:not([disabled]), [role="button"]:not([disabled]), [tabindex="0"]:not([disabled])',
 			),
-		);
+		).filter((el) => !el.hasAttribute('data-base-ui-focus-guard'));
 	}, [toolbarRef]);
 
 	useEffect(() => {
