@@ -1,5 +1,6 @@
 'use client';
 
+import Collaboration from '@tiptap/extension-collaboration';
 import { FindAndReplace } from '@tiptap/extension-find-and-replace';
 import { Highlight } from '@tiptap/extension-highlight';
 import { Image } from '@tiptap/extension-image';
@@ -13,13 +14,12 @@ import { EditorContent, EditorContext, useEditor } from '@tiptap/react';
 // --- Tiptap Core Extensions ---
 import { StarterKit } from '@tiptap/starter-kit';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import * as Y from 'yjs';
 
 import { DocumentHeader } from '@/components/document-header';
 // --- Icons ---
 import { ArrowLeftIcon } from '@/components/tiptap-icons/arrow-left-icon';
 import { HighlighterIcon } from '@/components/tiptap-icons/highlighter-icon';
-import { LinkIcon } from '@/components/tiptap-icons/link-icon';
-import { HorizontalRule } from '@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension';
 
 import '@/components/tiptap-node/blockquote-node/blockquote-node.scss';
 import '@/components/tiptap-node/code-block-node/code-block-node.scss';
@@ -29,9 +29,10 @@ import '@/components/tiptap-node/image-node/image-node.scss';
 import '@/components/tiptap-node/heading-node/heading-node.scss';
 import '@/components/tiptap-node/paragraph-node/paragraph-node.scss';
 
+import { LinkIcon } from '@/components/tiptap-icons/link-icon';
+import { HorizontalRule } from '@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension';
 // --- Tiptap Node ---
 import { ImageUploadNode } from '@/components/tiptap-node/image-upload-node/image-upload-node-extension';
-import content from '@/components/tiptap-templates/simple/data/content.json';
 // --- UI Primitives ---
 import { Button } from '@/components/tiptap-ui-primitive/button';
 import { Spacer } from '@/components/tiptap-ui-primitive/spacer';
@@ -52,12 +53,12 @@ import { MarkButton } from '@/components/tiptap-ui/mark-button';
 import { SearchAndReplace } from '@/components/tiptap-ui/search-and-replace';
 import { TextAlignButton } from '@/components/tiptap-ui/text-align-button';
 import { UndoRedoButton } from '@/components/tiptap-ui/undo-redo-button';
-import { useCursorVisibility } from '@/hooks/use-cursor-visibility';
-import type { DocumentSummary } from '@/hooks/use-documents.hook';
 
 // --- Styles ---
 import '@/components/tiptap-templates/simple/simple-editor.scss';
 
+import { useCursorVisibility } from '@/hooks/use-cursor-visibility';
+import type { DocumentSummary } from '@/hooks/use-documents.hook';
 // --- Hooks ---
 import { useIsBreakpoint } from '@/hooks/use-is-breakpoint';
 import { useWindowSize } from '@/hooks/use-window-size';
@@ -171,6 +172,8 @@ export function SimpleEditor({ document }: { document: DocumentSummary }) {
 	const toolbarRef = useRef<HTMLDivElement>(null);
 	const searchAndReplaceButtonRef = useRef<HTMLButtonElement>(null);
 
+	const [ydoc] = useState(() => new Y.Doc());
+
 	const editor = useEditor({
 		immediatelyRender: false,
 		editorProps: {
@@ -185,6 +188,7 @@ export function SimpleEditor({ document }: { document: DocumentSummary }) {
 		extensions: [
 			StarterKit.configure({
 				horizontalRule: false,
+				undoRedo: false,
 				link: {
 					openOnClick: false,
 					enableClickSelection: true,
@@ -211,8 +215,10 @@ export function SimpleEditor({ document }: { document: DocumentSummary }) {
 				upload: handleImageUpload,
 				onError: (error) => console.error('Upload failed:', error),
 			}),
+			Collaboration.configure({
+				document: ydoc,
+			}),
 		],
-		content,
 	});
 
 	const rect = useCursorVisibility({
