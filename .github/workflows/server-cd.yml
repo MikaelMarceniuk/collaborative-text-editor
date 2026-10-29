@@ -10,6 +10,7 @@ concurrency:
 
 jobs:
   ci:
+    if: startsWith(github.event.release.tag_name, 'server-v')
     uses: ./.github/workflows/server-ci.yml
 
   deploy:

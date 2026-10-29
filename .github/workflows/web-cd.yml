@@ -1,0 +1,32 @@
+name: Web CD
+
+on:
+  release:
+    types: [published]
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    if: startsWith(github.event.release.tag_name, 'web-v')
+    uses: ./.github/workflows/web-ci.yml
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    environment: web-env
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm install -g vercel@65.7.0
+
+      # Uploads the repo and builds on Vercel with the project settings (Root Directory apps/web)
+      - run: vercel deploy --prod --yes --token="$VERCEL_TOKEN"
