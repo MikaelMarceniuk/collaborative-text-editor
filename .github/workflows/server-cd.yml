@@ -1,0 +1,50 @@
+name: Server CD
+
+on:
+  release:
+    types: [published]
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/server-ci.yml
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    environment: server-env
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      # --stage only records the secrets; the deploy below applies them to the new machine
+      - name: Sync secrets
+        run: |
+          flyctl secrets set --stage --config apps/server/fly.toml \
+            MONGO_URL="$MONGO_URL" \
+            BETTER_AUTH_SECRET="$BETTER_AUTH_SECRET" \
+            RESEND_API_KEY="$RESEND_API_KEY"
+        env:
+          MONGO_URL: ${{ secrets.MONGO_URL }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+
+      # Non-secret config lives in the server-env variables, passed as plain env to the machine
+      - run: |
+          flyctl deploy . --config apps/server/fly.toml --remote-only \
+            --env NODE_ENV="$NODE_ENV" \
+            --env PORT="$PORT" \
+            --env BETTER_AUTH_URL="$BETTER_AUTH_URL" \
+            --env WEB_URL="$WEB_URL" \
+            --env MAIL_FROM="$MAIL_FROM"
+        env:
+          NODE_ENV: ${{ vars.NODE_ENV }}
+          PORT: ${{ vars.PORT }}
+          BETTER_AUTH_URL: ${{ vars.BETTER_AUTH_URL }}
+          WEB_URL: ${{ vars.WEB_URL }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
