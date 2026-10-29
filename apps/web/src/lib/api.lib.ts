@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:3333/api';
+const API_URL = '/api';
 
 export class ApiError extends Error {
 	readonly status: number;

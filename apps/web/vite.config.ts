@@ -14,4 +14,9 @@ export default defineConfig({
 		},
 		dedupe: ['yjs'],
 	},
+	server: {
+		proxy: {
+			'/api': 'http://localhost:3333',
+		},
+	},
 });
