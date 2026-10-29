@@ -1,20 +1,23 @@
-name: Server CD
+name: CD
 
 on:
   release:
     types: [published]
 
 concurrency:
-  group: deploy-server
+  group: deploy
   cancel-in-progress: false
 
 jobs:
-  ci:
-    if: startsWith(github.event.release.tag_name, 'server-v')
+  server-ci:
     uses: ./.github/workflows/server-ci.yml
 
-  deploy:
-    needs: ci
+  web-ci:
+    uses: ./.github/workflows/web-ci.yml
+
+  # Both CIs must pass before anything ships, so a release never goes out half-deployed
+  deploy-server:
+    needs: [server-ci, web-ci]
     runs-on: ubuntu-latest
     environment: server-env
     env:
@@ -49,3 +52,22 @@ jobs:
           BETTER_AUTH_URL: ${{ vars.BETTER_AUTH_URL }}
           WEB_URL: ${{ vars.WEB_URL }}
           MAIL_FROM: ${{ vars.MAIL_FROM }}
+
+  # Web goes after the server, so the new frontend never calls an API that isn't live yet
+  deploy-web:
+    needs: deploy-server
+    runs-on: ubuntu-latest
+    environment: web-env
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm install -g vercel@65.7.0
+
+      # Uploads the repo and builds on Vercel with the project settings (Root Directory apps/web)
+      - run: vercel deploy --prod --yes --token="$VERCEL_TOKEN"

@@ -2,10 +2,10 @@ name: Server CI
 
 on:
   pull_request:
-    paths: ["apps/server/**", "pnpm-lock.yaml", ".github/workflows/server-*.yml"]
+    paths: ["apps/server/**", "pnpm-lock.yaml", ".github/workflows/server-ci.yml"]
   push:
     branches: [master]
-    paths: ["apps/server/**", "pnpm-lock.yaml", ".github/workflows/server-*.yml"]
+    paths: ["apps/server/**", "pnpm-lock.yaml", ".github/workflows/server-ci.yml"]
   workflow_call:
 
 jobs:
