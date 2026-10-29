@@ -64,9 +64,11 @@ jobs:
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
     steps:
       - uses: actions/checkout@v5
+      # pnpm isn't installed here (Vercel builds remotely), so skip the cache setup-node infers from packageManager
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+          package-manager-cache: false
       - run: npm install -g vercel@65.7.0
 
       # Uploads the repo and builds on Vercel with the project settings (Root Directory apps/web)
