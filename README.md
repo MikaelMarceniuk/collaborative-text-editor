@@ -20,8 +20,9 @@ A Notion-style document editor built on **Yjs CRDTs**, designed from day one for
 - **Optimistic concurrency.** Writes are guarded by a version token and retried on conflict, so two saves arriving at the same time can't erase each other.
 - **Resilient autosave.** Debounced saves with a max-wait cap, exponential backoff on network errors, and a final flush when the tab closes.
 - **Guest mode.** Try the app without an account. Signing up later keeps the guest's documents, and abandoned guest accounts are cleaned up by a daily job.
-- **Role-based access.** Every document has members with an `owner`, `editor` or `viewer` role, enforced on every API route.
-- **CI/CD.** Lint, format and type checks on every push. Publishing a GitHub release deploys the API to Fly.io and then the web app to Vercel.
+- **Sharing with roles.** The owner invites people by email as `editor` or `viewer`, changes their role or removes them. Roles are enforced on every API route, and a role change cuts access immediately.
+- **Tested permissions.** Vitest and Supertest cover every document route for each role, against a real MongoDB.
+- **CI/CD.** Lint, format, type checks and tests on every push. Publishing a GitHub release deploys the API to Fly.io and then the web app to Vercel.
 
 ## Tech stack
 
@@ -32,6 +33,7 @@ A Notion-style document editor built on **Yjs CRDTs**, designed from day one for
 | **Collaboration**   | Yjs (CRDT)                                                                                              |
 | **Auth**            | Better Auth (email + password, email verification, anonymous guests), Resend                            |
 | **Database**        | MongoDB (native driver)                                                                                 |
+| **Testing**         | Vitest, Supertest                                                                                       |
 | **Tooling & infra** | pnpm workspaces, Oxlint, Oxfmt, Docker, GitHub Actions, Fly.io, Vercel                                  |
 
 ## How saving works
@@ -110,6 +112,15 @@ pnpm dev
 
 `Ctrl+C` stops the API and the web app but leaves MongoDB running. Use `pnpm dev:down` to stop it too.
 
+### Tests
+
+```bash
+pnpm dev                                    # or: docker compose -f compose-dev.yml up -d --wait
+pnpm --filter @collaborative-text-editor/server test
+```
+
+The server tests run against the local MongoDB, in a separate `collaborative-editor-test` database (override it with `TEST_MONGO_URL`).
+
 ## Roadmap
 
 - [x] Auth with email verification and guest mode
@@ -119,7 +130,7 @@ pnpm dev
 - [x] CI/CD to Fly.io and Vercel
 - [ ] Real-time collaboration over WebSocket
 - [ ] Live presence: other users' cursors and selections
-- [ ] Share documents by email with roles
+- [x] Share documents by email with roles
 - [x] One-command local setup with Docker Compose
 - [ ] Integration and E2E tests (two browsers editing the same document)
 - [ ] Version history with snapshots
