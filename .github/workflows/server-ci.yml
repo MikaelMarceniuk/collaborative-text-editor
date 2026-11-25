@@ -11,6 +11,13 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:8
+        ports:
+          - 27017:27017
+    env:
+      TEST_MONGO_URL: mongodb://localhost:27017/collaborative-editor-test
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
@@ -22,3 +29,5 @@ jobs:
       - run: pnpm --filter @collaborative-text-editor/server lint
       - run: pnpm --filter @collaborative-text-editor/server format:check
       - run: pnpm --filter @collaborative-text-editor/server build
+      - run: pnpm --filter @collaborative-text-editor/server typecheck
+      - run: pnpm --filter @collaborative-text-editor/server test
