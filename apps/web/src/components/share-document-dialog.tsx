@@ -1,6 +1,7 @@
 import { IconAlertTriangle, IconRefresh } from '@tabler/icons-react';
 
 import { DocumentMemberRow } from '@/components/document-member-row';
+import { InviteMemberForm } from '@/components/invite-member-form';
 import { Button } from '@/components/ui/button';
 import {
 	Dialog,
@@ -43,6 +44,8 @@ export const ShareDocumentDialog = ({ document, open, onOpenChange }: ShareDocum
 		{ enabled: open },
 	);
 
+	const isOwner = document?.ownerId === user.id;
+
 	const renderMembers = () => {
 		if (isMembersPending) {
 			return <MembersSkeleton />;
@@ -81,6 +84,8 @@ export const ShareDocumentDialog = ({ document, open, onOpenChange }: ShareDocum
 					<DialogTitle>Share document</DialogTitle>
 					<DialogDescription className="truncate">{document?.title}</DialogDescription>
 				</DialogHeader>
+
+				{isOwner && document && <InviteMemberForm documentId={document._id} />}
 
 				<section aria-label="People with access" className="flex flex-col gap-1">
 					<h3 className="text-sm font-medium">People with access</h3>
