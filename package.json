@@ -1,7 +1,10 @@
 {
 	"name": "@collaborative-text-editor/root",
 	"version": "1.0.0",
-	"scripts": {},
+	"scripts": {
+		"dev": "docker compose -f compose-dev.yml up -d --wait && pnpm --parallel -r start:dev",
+		"dev:down": "docker compose -f compose-dev.yml down"
+	},
 	"keywords": [],
 	"author": "Mikael Campos Marceniuk",
 	"license": "ISC",
