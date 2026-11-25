@@ -10,19 +10,19 @@ Mostrar domínio da stack MERN em um cenário difícil de verdade: tempo real, s
 
 | Camada | Tecnologia |
 |---|---|
-| Front | React + Vite + TypeScript, Tiptap (ProseMirror), TanStack Query, Tailwind |
-| Back | Node.js + Express + TypeScript |
+| Front | React + Vite + TypeScript, Tiptap (ProseMirror), TanStack Query, React Router, Tailwind, shadcn/ui |
+| Back | Node.js + Express 5 + TypeScript, Zod |
 | Tempo real | Socket.IO + Yjs (CRDT) |
-| Banco | MongoDB (Mongoose) |
+| Banco | MongoDB (driver nativo) |
 | Cache / pub-sub | Redis (adapter do Socket.IO para escalar horizontalmente) |
-| Auth | JWT (access + refresh token em cookie httpOnly) |
-| Testes | Vitest/Jest, Supertest, Playwright |
-| Infra | Docker Compose, CI no GitHub Actions, deploy (Render/Fly.io + Mongo Atlas + Vercel) |
+| Auth | Better Auth (e-mail + senha, verificação por e-mail via Resend, guest anônimo), sessão em cookie |
+| Testes | Vitest, Supertest, Playwright |
+| Infra | Docker Compose (dev), CI/CD no GitHub Actions, Fly.io (API) + Vercel (web) + Mongo Atlas |
 
 ## Funcionalidades
 
 ### MVP
-- Cadastro, login e logout
+- Cadastro, login e logout (feito) e modo guest (feito, fora do plano original)
 - Criar, renomear, listar e excluir documentos
 - Editor rico: títulos, negrito/itálico, listas, checklist, código, citação, links
 - Autosave
@@ -42,14 +42,13 @@ Mostrar domínio da stack MERN em um cenário difícil de verdade: tempo real, s
 ## Modelagem (MongoDB)
 
 ```ts
-User {
-  _id, name, email, passwordHash, avatarColor, createdAt
-}
+// User, session e account são coleções do Better Auth (não há model próprio)
 
 Document {
   _id, title, ownerId,
   members: [{ userId, role: 'owner' | 'editor' | 'viewer' }],
-  ydocState: Buffer,      // estado binário do Yjs
+  ydocState: Binary,      // estado binário do Yjs
+  contentVersion: number, // concorrência otimista na gravação do ydocState
   updatedAt, createdAt
 }
 
@@ -64,7 +63,7 @@ Comment {
 
 ## Arquitetura do tempo real
 
-1. Cliente abre o documento e entra numa sala do Socket.IO (`doc:<id>`), autenticada pelo JWT.
+1. Cliente abre o documento e entra numa sala do Socket.IO (`doc:<id>`), autenticada pela sessão do Better Auth (cookie).
 2. O servidor valida a permissão e envia o estado atual do Yjs.
 3. Cada edição gera um update binário do Yjs, enviado ao servidor e retransmitido para a sala.
 4. Updates são acumulados em memória/Redis e persistidos no Mongo com debounce (ex.: a cada 2s ou N updates).
@@ -74,37 +73,40 @@ Comment {
 ## API REST (resumo)
 
 ```
-POST   /auth/register
-POST   /auth/login
-POST   /auth/refresh
-POST   /auth/logout
+/api/auth/*                         # Better Auth (sign-up, sign-in, sign-out, verificação, guest)
 
-GET    /documents
-POST   /documents
-GET    /documents/:id
-PATCH  /documents/:id
-DELETE /documents/:id
+GET    /api/documents
+POST   /api/documents
+GET    /api/documents/:id
+PATCH  /api/documents/:id
+DELETE /api/documents/:id
+GET    /api/documents/:id/content   # estado Yjs (octet-stream)
+POST   /api/documents/:id/updates   # update incremental Yjs (octet-stream); sai de cena com o Socket.IO
 
-POST   /documents/:id/members
-PATCH  /documents/:id/members/:userId
-DELETE /documents/:id/members/:userId
+POST   /api/documents/:id/members            # a fazer
+PATCH  /api/documents/:id/members/:userId   # a fazer
+DELETE /api/documents/:id/members/:userId   # a fazer
 
-GET    /documents/:id/versions
-POST   /documents/:id/versions/:versionId/restore
+GET    /api/documents/:id/versions            # V2
+POST   /api/documents/:id/versions/:versionId/restore   # V2
 ```
 
 ## Roadmap (8 semanas)
 
-| Semana | Entrega |
-|---|---|
-| 1 | Setup do monorepo, Docker Compose, CI, auth completa |
-| 2 | CRUD de documentos e tela de listagem |
-| 3 | Editor com Tiptap e autosave via REST |
-| 4 | Tempo real com Socket.IO + Yjs, persistência com debounce |
-| 5 | Presença (cursores), compartilhamento e permissões |
-| 6 | Redis adapter, testes de integração e E2E com dois navegadores |
-| 7 | Histórico de versões e busca |
-| 8 | Deploy, README caprichado, GIF de demo, polimento |
+| Semana | Entrega | Estado |
+|---|---|---|
+| 1 | Setup do monorepo, Docker Compose, CI, auth completa | feito (v0.1.0; Compose só para dev) |
+| 2 | CRUD de documentos e tela de listagem | feito |
+| 3 | Editor com Tiptap e autosave via REST | feito (já com Yjs, ver `document-persistence.md`) |
+| 4 | Tempo real com Socket.IO + Yjs, persistência com debounce | a fazer |
+| 5 | Presença (cursores), compartilhamento e permissões | a fazer |
+| 6 | Redis adapter, testes de integração e E2E com dois navegadores | a fazer |
+| 7 | Histórico de versões e busca | a fazer |
+| 8 | Deploy, README caprichado, GIF de demo, polimento | deploy feito; o resto a fazer |
+
+### Próximo passo
+
+Compartilhamento e permissões vêm antes do Socket.IO, porque a sala do socket valida o papel do usuário. Plano em `docs/sharing.md` (a criar). O todo do membro duplicado ao juntar documentos de guest (`docs/todos.md`) entra junto.
 
 ## O que destacar no README
 
