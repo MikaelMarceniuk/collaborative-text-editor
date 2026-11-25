@@ -1,21 +1,7 @@
-import {
-	changeMemberRole,
-	createDocument,
-	inviteMember,
-	removeMember,
-	type Role,
-} from '../src/api.ts';
-import { contentOf, editorOf, openDocument, saveStatusOf, typeInEditor } from '../src/editor.ts';
+import { changeMemberRole, removeMember } from '../src/api.ts';
+import { contentOf, editorOf, saveStatusOf, typeInEditor } from '../src/editor.ts';
 import { expect, test, type Person } from '../src/fixtures.ts';
-
-/** Alice owns a document that Bob can open with the given role. Both have it open when this returns. */
-async function shareAndOpen(alice: Person, bob: Person, role: Role) {
-	const documentId = await createDocument(alice);
-	await inviteMember(alice, documentId, bob, role);
-
-	await Promise.all([openDocument(alice.page, documentId), openDocument(bob.page, documentId)]);
-	return documentId;
-}
+import { shareAndOpen } from '../src/scenario.ts';
 
 const textOf = (person: Person) => contentOf(person.page);
 
