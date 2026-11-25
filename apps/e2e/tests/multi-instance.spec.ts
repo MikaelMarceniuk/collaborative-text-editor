@@ -14,14 +14,20 @@ test('someone who joins on the other instance gets what was not saved yet', asyn
 	alice,
 	bob,
 }) => {
-	const documentId = await createDocument(alice);
-	await inviteMember(alice, documentId, bob, 'editor');
+	let documentId = '';
 
-	await openDocument(alice.page, documentId);
-	await typeInEditor(alice.page, 'Only instance A has this.');
+	// The proof only holds while the text is not in the database yet: it goes there 2s after the last
+	// edit. If Alice was slow (a loaded machine), start over with another document
+	await expect(async () => {
+		documentId = await createDocument(alice);
+		await inviteMember(alice, documentId, bob, 'editor');
 
-	// The proof only holds while the text is not in the database: it goes there after the debounce (2s)
-	expect(await savedVersionOf(documentId)).toBe(0);
+		await openDocument(alice.page, documentId);
+		await editorOf(alice.page).click();
+		await alice.page.keyboard.insertText('Only instance A has this.');
+
+		expect(await savedVersionOf(documentId)).toBe(0);
+	}).toPass({ timeout: 30_000 });
 
 	await openDocument(bob.page, documentId);
 	await expect(editorOf(bob.page)).toContainText('Only instance A has this.');
