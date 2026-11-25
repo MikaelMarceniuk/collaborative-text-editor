@@ -15,7 +15,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { ViewOnlyIndicator } from '@/components/view-only-indicator';
 import type { DocumentSummary } from '@/hooks/use-documents.hook';
-import type { SaveStatus } from '@/lib/document-sync.lib';
+import type { SaveStatus } from '@/lib/document-socket.lib';
 
 interface DocumentHeaderProps {
 	document: DocumentSummary;

@@ -1,41 +1,35 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as Y from 'yjs';
 
 import { toast } from '@/components/ui/toast';
-import { createDocumentSync, REMOTE_ORIGIN, type SaveStatus } from '@/lib/document-sync.lib';
+import { createDocumentSocket, type DocumentSyncState } from '@/lib/document-socket.lib';
 
 import { documentsQueryKeys } from './use-documents.hook';
 import { useAuthenticatedSession } from './use-session.hook';
 
-export const useDocumentSync = (
-	documentId: string,
-	initialContent: Uint8Array,
-	{ canEdit }: { canEdit: boolean },
-) => {
-	const [ydoc] = useState(() => {
-		const doc = new Y.Doc();
-		Y.applyUpdate(doc, initialContent, REMOTE_ORIGIN);
-		return doc;
+/**
+ * Opens the document's socket and keeps a Y.Doc in sync with the server. The document is ready for the editor
+ * when `status` is "ready": the first sync has already put the content in `ydoc`.
+ * The page must give this hook a `key` (the document id), so a new document never inherits the previous Y.Doc.
+ */
+export const useDocumentSync = (documentId: string) => {
+	const [ydoc] = useState(() => new Y.Doc());
+	const [state, setState] = useState<DocumentSyncState>({
+		status: 'connecting',
+		saveStatus: 'saved',
 	});
-	const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
+	const syncRef = useRef<ReturnType<typeof createDocumentSocket>>(null);
 	const { user } = useAuthenticatedSession();
 	const queryClient = useQueryClient();
 
 	useEffect(() => {
-		// Viewers never send anything: the server would answer 403 to every update
-		if (!canEdit) return;
-
-		const sync = createDocumentSync({
+		const sync = createDocumentSocket({
 			documentId,
 			ydoc,
-			onSaveStatusChange: setSaveStatus,
-			onAccessLost: () => {
-				toast.add({
-					type: 'error',
-					title: 'Your access to this document changed',
-					description: "Your latest changes couldn't be saved.",
-				});
+			onStateChange: setState,
+			onAccessChanged: () => {
+				toast.add({ type: 'info', title: 'Your access to this document changed' });
 				// Reloads the role: someone who was removed gets "Document not found",
 				// someone who became a viewer gets the view-only editor
 				void queryClient.invalidateQueries({
@@ -44,24 +38,19 @@ export const useDocumentSync = (
 				});
 			},
 		});
-
-		const handleVisibilityChange = () => {
-			if (window.document.visibilityState === 'hidden') sync.flush();
-		};
+		syncRef.current = sync;
 
 		const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-			if (sync.hasUnsavedChanges()) event.preventDefault();
+			if (sync.hasUnsyncedChanges()) event.preventDefault();
 		};
-
-		window.document.addEventListener('visibilitychange', handleVisibilityChange);
 		window.addEventListener('beforeunload', handleBeforeUnload);
 
 		return () => {
-			window.document.removeEventListener('visibilitychange', handleVisibilityChange);
 			window.removeEventListener('beforeunload', handleBeforeUnload);
+			syncRef.current = null;
 			sync.destroy();
 		};
-	}, [documentId, ydoc, canEdit, queryClient, user.id]);
+	}, [documentId, ydoc, queryClient, user.id]);
 
-	return { ydoc, saveStatus };
+	return { ydoc, ...state, retry: () => syncRef.current?.retry() };
 };
