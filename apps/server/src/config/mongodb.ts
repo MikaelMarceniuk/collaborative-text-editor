@@ -3,6 +3,7 @@ import { setTimeout } from 'node:timers/promises';
 import { MongoClient } from 'mongodb';
 
 import type { DocumentModel } from '../models/document.model.js';
+import type { UserModel } from '../models/user.model.js';
 import { env } from './env.js';
 
 export const mongoClient = new MongoClient(env.MONGO_URL, {
@@ -13,6 +14,8 @@ export const db = mongoClient.db();
 
 export const collections = {
 	documents: db.collection<DocumentModel>('documents'),
+	// Owned by Better Auth: only read from here, never write
+	users: db.collection<UserModel>('user'),
 };
 
 // createIndex is idempotent: it does nothing when the index already exists
