@@ -7,6 +7,8 @@
 		"start:dev": "tsx watch --env-file=.env src/server.ts",
 		"start:prd": "node --env-file=.env dist/server.js",
 		"build": "tsc",
+		"test": "vitest run",
+		"test:watch": "vitest",
 		"lint": "oxlint",
 		"format": "oxfmt",
 		"format:check": "oxfmt --check"
@@ -25,9 +27,12 @@
 		"@types/cors": "^2.8.19",
 		"@types/express": "^5.0.6",
 		"@types/node": "^24.19.2",
+		"@types/supertest": "^7.2.1",
 		"oxfmt": "^0.74.0",
 		"oxlint": "^1.89.0",
+		"supertest": "^7.3.2",
 		"tsx": "^4.23.15",
-		"typescript": "~6.0.3"
+		"typescript": "~6.0.3",
+		"vitest": "^5.1.1"
 	}
 }
