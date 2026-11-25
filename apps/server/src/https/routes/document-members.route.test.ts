@@ -331,3 +331,75 @@ describe('PATCH /api/documents/:id/members/:userId', () => {
 		expect(response.status).toBe(400);
 	});
 });
+
+describe('DELETE /api/documents/:id/members/:userId', () => {
+	const removeMember = (documentId: ObjectId, as: { id: ObjectId }, memberId: ObjectId) =>
+		request(app).delete(`/api/documents/${documentId}/members/${memberId}`).set(asUser(as.id));
+
+	it.each([
+		['owner', 204],
+		['editor', 403],
+		['viewer', 403],
+		['stranger', 404],
+	] as const)('removing another member as %s responds %i', async (who, status) => {
+		const { document, users } = await setup();
+		// The editor is the target, except when the editor is the one removing: then it is the viewer
+		const target = who === 'editor' ? users.viewer : users.editor;
+
+		const response = await removeMember(document._id, users[who], target.id);
+
+		expect(response.status).toBe(status);
+	});
+
+	it.each(['editor', 'viewer'] as const)('lets the %s leave the document', async (who) => {
+		const { document, users } = await setup();
+
+		const response = await removeMember(document._id, users[who], users[who].id);
+
+		expect(response.status).toBe(204);
+
+		const saved = await collections.documents.findOne({ _id: document._id });
+		expect(saved?.members.some((member) => member.userId.equals(users[who].id))).toBe(false);
+		expect(saved?.members).toHaveLength(2);
+	});
+
+	it('cuts access right away: the removed member gets 404 on the content', async () => {
+		const { document, users } = await setup();
+
+		await removeMember(document._id, users.owner, users.viewer.id);
+
+		const response = await request(app)
+			.get(`/api/documents/${document._id}/content`)
+			.set(asUser(users.viewer.id));
+		expect(response.status).toBe(404);
+	});
+
+	it('responds 400 when the owner tries to leave', async () => {
+		const { document, users } = await setup();
+
+		const response = await removeMember(document._id, users.owner, users.owner.id);
+
+		expect(response.status).toBe(400);
+
+		const saved = await collections.documents.findOne({ _id: document._id });
+		expect(saved?.members).toHaveLength(3);
+	});
+
+	it('responds 404 for someone who is not a member', async () => {
+		const { document, users } = await setup();
+
+		const response = await removeMember(document._id, users.owner, users.stranger.id);
+
+		expect(response.status).toBe(404);
+	});
+
+	it('responds 404 for an invalid user id', async () => {
+		const { document, users } = await setup();
+
+		const response = await request(app)
+			.delete(`/api/documents/${document._id}/members/nope`)
+			.set(asUser(users.owner.id));
+
+		expect(response.status).toBe(404);
+	});
+});
