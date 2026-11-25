@@ -18,7 +18,8 @@ import {
 	EmptyMedia,
 	EmptyTitle,
 } from '@/components/ui/empty';
-import { useDocument, useDocumentContent } from '@/hooks/use-documents.hook';
+import { useDocumentSync } from '@/hooks/use-document-sync.hook';
+import { useDocument } from '@/hooks/use-documents.hook';
 
 const useDocumentTitle = (title: string | undefined) => {
 	useEffect(() => {
@@ -42,14 +43,19 @@ const backToDocumentsLink = (
 
 export const DocumentEditorPage = () => {
 	const { id } = useParams<'id'>();
+
+	// The key gives each document its own Y.Doc and socket
+	return <DocumentEditor key={id} documentId={id!} />;
+};
+
+const DocumentEditor = ({ documentId }: { documentId: string }) => {
 	const { document, isDocumentPending, isDocumentError, isDocumentNotFound, refetchDocument } =
-		useDocument(id!);
-	const { content, isContentPending, isContentError, isContentNotFound, refetchContent } =
-		useDocumentContent(id!);
+		useDocument(documentId);
+	const { ydoc, status, saveStatus, retry } = useDocumentSync(documentId);
 
 	useDocumentTitle(document?.title);
 
-	if (isDocumentPending || isContentPending) {
+	if (isDocumentPending || status === 'connecting') {
 		return (
 			<div className="flex min-h-svh items-center justify-center gap-2 text-sm text-muted-foreground">
 				<IconLoader2 className="size-4 animate-spin" />
@@ -58,7 +64,7 @@ export const DocumentEditorPage = () => {
 		);
 	}
 
-	if (isDocumentNotFound || isContentNotFound) {
+	if (isDocumentNotFound || status === 'not-found') {
 		return (
 			<Empty className="min-h-svh">
 				<EmptyHeader>
@@ -75,7 +81,7 @@ export const DocumentEditorPage = () => {
 		);
 	}
 
-	if (isDocumentError || isContentError || !document || !content) {
+	if (isDocumentError || status === 'error' || !document) {
 		return (
 			<Empty className="min-h-svh">
 				<EmptyHeader>
@@ -91,7 +97,7 @@ export const DocumentEditorPage = () => {
 						size="sm"
 						onClick={() => {
 							if (isDocumentError) void refetchDocument();
-							if (isContentError) void refetchContent();
+							if (status === 'error') retry();
 						}}
 					>
 						<IconRefresh />
@@ -102,5 +108,7 @@ export const DocumentEditorPage = () => {
 		);
 	}
 
-	return <SimpleEditor key={document._id} document={document} content={content} />;
+	return (
+		<SimpleEditor key={document._id} document={document} ydoc={ydoc} saveStatus={saveStatus} />
+	);
 };

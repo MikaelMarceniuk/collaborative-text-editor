@@ -1,12 +1,12 @@
-import { IconCloudCheck, IconCloudUp, IconCloudX } from '@tabler/icons-react';
+import { IconCloudCheck, IconCloudOff, IconCloudUp } from '@tabler/icons-react';
 import { cn } from 'cn';
 
-import type { SaveStatus } from '@/lib/document-sync.lib';
+import type { SaveStatus } from '@/lib/document-socket.lib';
 
 const saveStatusContent = {
 	saved: { icon: IconCloudCheck, label: 'Saved' },
 	saving: { icon: IconCloudUp, label: 'Saving…' },
-	error: { icon: IconCloudX, label: "Couldn't save" },
+	offline: { icon: IconCloudOff, label: 'Offline' },
 } satisfies Record<SaveStatus, { icon: typeof IconCloudCheck; label: string }>;
 
 export const SaveStatusIndicator = ({ status }: { status: SaveStatus }) => {
@@ -18,7 +18,7 @@ export const SaveStatusIndicator = ({ status }: { status: SaveStatus }) => {
 			title={label}
 			className={cn(
 				'flex items-center gap-1.5 px-2 text-sm text-muted-foreground',
-				status === 'error' && 'text-destructive',
+				status === 'offline' && 'text-destructive',
 			)}
 		>
 			<Icon className="size-4" />
