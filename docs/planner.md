@@ -106,7 +106,7 @@ POST   /api/documents/:id/versions/:versionId/restore   # V2
 
 ### Próximo passo
 
-A presença está pronta (`docs/presence.md`), então a semana 5 fechou. Segue a semana 6: Redis adapter e testes E2E com dois navegadores. Antes do Redis adapter, ler "Riscos" em `docs/realtime.md`: as salas em memória de cada instância precisarão receber os updates das outras (a presença já atravessa instâncias, porque só é retransmitida). O E2E é também onde a presença ganha teste automático, que o web ainda não tem.
+A presença está pronta (`docs/presence.md`), então a semana 5 fechou. Segue a semana 6: Redis adapter e testes E2E com dois navegadores. O plano do Redis está em `docs/redis.md`; o do E2E vem depois. Antes do Redis adapter, ler "Riscos" em `docs/realtime.md`: as salas em memória de cada instância precisarão receber os updates das outras (a presença já atravessa instâncias, porque só é retransmitida). O E2E é também onde a presença ganha teste automático, que o web ainda não tem.
 
 ## O que destacar no README
 
