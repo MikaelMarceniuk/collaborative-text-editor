@@ -1,6 +1,7 @@
 import type { ObjectId } from 'mongodb';
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
+import * as Y from 'yjs';
 
 import { app } from '../../app.js';
 import { collections } from '../../config/mongodb.js';
@@ -230,6 +231,102 @@ describe('POST /api/documents/:id/members', () => {
 		const { document, users } = await setup();
 
 		const response = await invite(document._id, users.owner, body);
+
+		expect(response.status).toBe(400);
+	});
+});
+
+describe('PATCH /api/documents/:id/members/:userId', () => {
+	const changeRole = (
+		documentId: ObjectId,
+		as: { id: ObjectId },
+		memberId: ObjectId,
+		body: object,
+	) =>
+		request(app)
+			.patch(`/api/documents/${documentId}/members/${memberId}`)
+			.set(asUser(as.id))
+			.send(body);
+
+	it.each([
+		['owner', 200],
+		['editor', 403],
+		['viewer', 403],
+		['stranger', 404],
+	] as const)('as %s responds %i', async (who, status) => {
+		const { document, users } = await setup();
+
+		const response = await changeRole(document._id, users[who], users.viewer.id, {
+			role: 'editor',
+		});
+
+		expect(response.status).toBe(status);
+	});
+
+	it('changes the role of the member', async () => {
+		const { document, users } = await setup();
+
+		const response = await changeRole(document._id, users.owner, users.editor.id, {
+			role: 'viewer',
+		});
+
+		expect(response.body.member).toEqual({
+			userId: users.editor.id.toHexString(),
+			role: 'viewer',
+		});
+
+		const saved = await collections.documents.findOne({ _id: document._id });
+		expect(saved?.members.find((member) => member.userId.equals(users.editor.id))?.role).toBe(
+			'viewer',
+		);
+		expect(saved?.members.find((member) => member.userId.equals(users.viewer.id))?.role).toBe(
+			'viewer',
+		);
+	});
+
+	it('takes effect right away: a demoted editor can no longer send updates', async () => {
+		const { document, users } = await setup();
+		const sendUpdate = () =>
+			request(app)
+				.post(`/api/documents/${document._id}/updates`)
+				.set(asUser(users.editor.id))
+				.set('Content-Type', 'application/octet-stream')
+				.send(Buffer.from(Y.encodeStateAsUpdate(new Y.Doc())));
+
+		expect((await sendUpdate()).status).toBe(204);
+
+		await changeRole(document._id, users.owner, users.editor.id, { role: 'viewer' });
+
+		expect((await sendUpdate()).status).toBe(403);
+	});
+
+	it('responds 400 when changing the owner', async () => {
+		const { document, users } = await setup();
+
+		const response = await changeRole(document._id, users.owner, users.owner.id, {
+			role: 'viewer',
+		});
+
+		expect(response.status).toBe(400);
+	});
+
+	it('responds 404 for someone who is not a member', async () => {
+		const { document, users } = await setup();
+
+		const response = await changeRole(document._id, users.owner, users.stranger.id, {
+			role: 'viewer',
+		});
+
+		expect(response.status).toBe(404);
+	});
+
+	it.each([
+		['the owner role', { role: 'owner' }],
+		['a missing role', {}],
+	])('responds 400 for %s', async (_name, body) => {
+		const { document, users } = await setup();
+
+		const response = await changeRole(document._id, users.owner, users.editor.id, body);
 
 		expect(response.status).toBe(400);
 	});
