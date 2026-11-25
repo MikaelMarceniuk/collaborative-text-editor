@@ -1,23 +1,23 @@
 {
-  "name": "@collaborative-text-editor/e2e",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "test": "tsx src/drop-database.ts && playwright test",
-    "test:ui": "tsx src/drop-database.ts && playwright test --ui",
-    "typecheck": "tsc",
-    "lint": "oxlint",
-    "format": "oxfmt",
-    "format:check": "oxfmt --check"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.60.0",
-    "@types/node": "^24.19.2",
-    "mongodb": "~7.7.0",
-    "oxfmt": "^0.74.0",
-    "oxlint": "^1.89.0",
-    "tsx": "^4.23.15",
-    "typescript": "~6.0.3"
-  }
+	"name": "@collaborative-text-editor/e2e",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"test": "tsx src/drop-database.ts && playwright test",
+		"test:ui": "tsx src/drop-database.ts && playwright test --ui",
+		"typecheck": "tsc",
+		"lint": "oxlint",
+		"format": "oxfmt",
+		"format:check": "oxfmt --check"
+	},
+	"devDependencies": {
+		"@playwright/test": "^1.60.0",
+		"@types/node": "^24.19.2",
+		"mongodb": "~7.7.0",
+		"oxfmt": "^0.74.0",
+		"oxlint": "^1.89.0",
+		"tsx": "^4.23.15",
+		"typescript": "~6.0.3"
+	}
 }
