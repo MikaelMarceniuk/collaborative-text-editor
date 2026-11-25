@@ -1,8 +1,10 @@
 import type { Server as HttpServer } from 'node:http';
 
+import { createAdapter } from '@socket.io/redis-adapter';
 import { Server } from 'socket.io';
 
 import { env } from '../config/env.js';
+import type { RedisConnection } from '../config/redis.js';
 import { type AccessNotifier, resetAccessNotifier, setAccessNotifier } from './access-notifier.js';
 import { createDocumentRooms } from './document-rooms.js';
 import { registerDocumentSocket } from './document-socket.js';
@@ -14,13 +16,23 @@ export const SOCKET_PATH = '/api/socket.io';
 // A single update (for example the diff of a long offline session) is bounded by this
 const MAX_MESSAGE_BYTES = 2 * 1024 * 1024;
 
-export const createSocketServer = (httpServer: HttpServer) => {
+interface SocketServerOptions {
+	/**
+	 * Connects this instance to the others (docs/redis.md). Without it the server is a single instance.
+	 * The caller owns the connection and closes it after close().
+	 */
+	redis?: RedisConnection;
+}
+
+export const createSocketServer = (httpServer: HttpServer, { redis }: SocketServerOptions = {}) => {
 	const io = new Server(httpServer, {
 		path: SOCKET_PATH,
 		// WebSocket only: long-polling would need sticky sessions once there is more than one instance
 		transports: ['websocket'],
 		maxHttpBufferSize: MAX_MESSAGE_BYTES,
 		cors: { origin: env.WEB_URL, credentials: true },
+		// With Redis, what is broadcast to a room reaches the sockets of every instance
+		...(redis && { adapter: createAdapter(redis.pub, redis.sub) }),
 	});
 
 	const rooms = createDocumentRooms();
