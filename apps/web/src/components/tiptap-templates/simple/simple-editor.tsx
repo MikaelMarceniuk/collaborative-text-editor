@@ -1,6 +1,7 @@
 'use client';
 
 import Collaboration from '@tiptap/extension-collaboration';
+import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import { FindAndReplace } from '@tiptap/extension-find-and-replace';
 import { Highlight } from '@tiptap/extension-highlight';
 import { Image } from '@tiptap/extension-image';
@@ -14,6 +15,7 @@ import { EditorContent, EditorContext, useEditor } from '@tiptap/react';
 // --- Tiptap Core Extensions ---
 import { StarterKit } from '@tiptap/starter-kit';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
 
 import { DocumentHeader } from '@/components/document-header';
@@ -65,6 +67,7 @@ import { useAuthenticatedSession } from '@/hooks/use-session.hook';
 import { useWindowSize } from '@/hooks/use-window-size';
 import type { SaveStatus } from '@/lib/document-socket.lib';
 // --- Lib ---
+import { getPresenceUser } from '@/lib/presence.lib';
 import { handleImageUpload, MAX_FILE_SIZE } from '@/lib/tiptap-utils';
 
 const SEARCH_AND_REPLACE_SCROLL_OPTIONS: ScrollIntoViewOptions = {
@@ -170,10 +173,12 @@ interface SimpleEditorProps {
 	document: DocumentSummary;
 	// Already loaded by the first sync (see useDocumentSync), so the editor opens with the content
 	ydoc: Y.Doc;
+	// The presence of the other people, shown as cursors and selections
+	awareness: Awareness;
 	saveStatus: SaveStatus;
 }
 
-export function SimpleEditor({ document, ydoc, saveStatus }: SimpleEditorProps) {
+export function SimpleEditor({ document, ydoc, awareness, saveStatus }: SimpleEditorProps) {
 	const isMobile = useIsBreakpoint();
 	const { height } = useWindowSize();
 	const [mobileView, setMobileView] = useState<'main' | 'highlighter' | 'link'>('main');
@@ -230,6 +235,11 @@ export function SimpleEditor({ document, ydoc, saveStatus }: SimpleEditorProps) 
 			}),
 			Collaboration.configure({
 				document: ydoc,
+			}),
+			CollaborationCaret.configure({
+				provider: { awareness },
+				// Written to the Awareness when the editor is created, so it has to be the same one the socket shares
+				user: getPresenceUser(user),
 			}),
 		],
 	});

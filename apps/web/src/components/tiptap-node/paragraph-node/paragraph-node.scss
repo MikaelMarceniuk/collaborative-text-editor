@@ -1,5 +1,6 @@
 .tiptap.ProseMirror {
-	--tt-collaboration-carets-label: var(--tt-gray-light-900);
+	// White in both themes: the user colors (see lib/presence.lib.ts) are dark enough for it
+	--tt-collaboration-carets-label: #fff;
 	--link-text-color: var(--tt-brand-color-500);
 	--placeholder-color: var(--tt-gray-light-a-400);
 
@@ -7,7 +8,6 @@
 	--tiptap-ai-insertion-color: var(--tt-brand-color-600);
 
 	.dark & {
-		--tt-collaboration-carets-label: var(--tt-gray-dark-100);
 		--link-text-color: var(--tt-brand-color-400);
 		--placeholder-color: var(--tt-gray-dark-a-400);
 

@@ -51,11 +51,11 @@ export const DocumentEditorPage = () => {
 const DocumentEditor = ({ documentId }: { documentId: string }) => {
 	const { document, isDocumentPending, isDocumentError, isDocumentNotFound, refetchDocument } =
 		useDocument(documentId);
-	const { ydoc, status, saveStatus, retry } = useDocumentSync(documentId);
+	const { ydoc, awareness, status, saveStatus, retry } = useDocumentSync(documentId);
 
 	useDocumentTitle(document?.title);
 
-	if (isDocumentPending || status === 'connecting') {
+	if (isDocumentPending || status === 'connecting' || !awareness) {
 		return (
 			<div className="flex min-h-svh items-center justify-center gap-2 text-sm text-muted-foreground">
 				<IconLoader2 className="size-4 animate-spin" />
@@ -109,6 +109,12 @@ const DocumentEditor = ({ documentId }: { documentId: string }) => {
 	}
 
 	return (
-		<SimpleEditor key={document._id} document={document} ydoc={ydoc} saveStatus={saveStatus} />
+		<SimpleEditor
+			key={document._id}
+			document={document}
+			ydoc={ydoc}
+			awareness={awareness}
+			saveStatus={saveStatus}
+		/>
 	);
 };
