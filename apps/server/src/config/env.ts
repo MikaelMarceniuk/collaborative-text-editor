@@ -1,24 +1,38 @@
 import { z } from 'zod';
 
-const envSchema = z.object({
-	NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-	PORT: z.coerce.number().int().positive().default(3333),
+const envSchema = z
+	.object({
+		NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+		PORT: z.coerce.number().int().positive().default(3333),
 
-	MONGO_URL: z
-		.string()
-		.regex(
-			/^mongodb(\+srv)?:\/\/[^/]+\/[^/?]+/,
-			'Must be a mongodb URL including the database name',
+		MONGO_URL: z
+			.string()
+			.regex(
+				/^mongodb(\+srv)?:\/\/[^/]+\/[^/?]+/,
+				'Must be a mongodb URL including the database name',
+			),
+
+		BETTER_AUTH_SECRET: z.string().min(32),
+		BETTER_AUTH_URL: z.url(),
+
+		// Optional only in development, where emails are logged to the console instead of sent
+		RESEND_API_KEY: z.preprocess(
+			(value) => (value === '' ? undefined : value),
+			z.string().startsWith('re_').optional(),
 		),
+		MAIL_FROM: z.string().default('Collaborative Editor <onboarding@resend.dev>'),
 
-	BETTER_AUTH_SECRET: z.string().min(32),
-	BETTER_AUTH_URL: z.url(),
-
-	RESEND_API_KEY: z.string().startsWith('re_'),
-	MAIL_FROM: z.string().default('Collaborative Editor <onboarding@resend.dev>'),
-
-	WEB_URL: z.url().default('http://localhost:5173'),
-});
+		WEB_URL: z.url().default('http://localhost:5173'),
+	})
+	.superRefine((data, ctx) => {
+		if (data.NODE_ENV !== 'development' && !data.RESEND_API_KEY) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['RESEND_API_KEY'],
+				message: 'Required when NODE_ENV is not "development"',
+			});
+		}
+	});
 
 const parsed = envSchema.safeParse(process.env);
 
