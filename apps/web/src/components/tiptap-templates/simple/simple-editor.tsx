@@ -285,6 +285,7 @@ export function SimpleEditor({ document, ydoc, awareness, saveStatus }: SimpleEd
 			<EditorContext.Provider value={{ editor }}>
 				<DocumentHeader
 					document={document}
+					awareness={awareness}
 					// A viewer has nothing to save, but still wants to know that the live updates stopped
 					saveStatus={canEdit || saveStatus === 'offline' ? saveStatus : undefined}
 					isViewOnly={!canEdit}
