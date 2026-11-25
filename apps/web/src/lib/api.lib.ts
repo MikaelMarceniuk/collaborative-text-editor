@@ -29,23 +29,3 @@ export const apiFetch = async <T>(path: string, init?: RequestInit): Promise<T> 
 
 	return response.json() as Promise<T>;
 };
-
-interface ApiFetchBinaryInit extends Omit<RequestInit, 'body'> {
-	body?: Uint8Array;
-}
-
-export const apiFetchBinary = async (
-	path: string,
-	{ body, ...init }: ApiFetchBinaryInit = {},
-): Promise<Uint8Array> => {
-	const response = await fetch(`${API_URL}${path}`, {
-		...init,
-		body: body as Uint8Array<ArrayBuffer> | undefined,
-		credentials: 'include',
-		headers: { 'Content-Type': 'application/octet-stream', ...init.headers },
-	});
-
-	if (!response.ok) await throwApiError(response);
-
-	return new Uint8Array(await response.arrayBuffer());
-};

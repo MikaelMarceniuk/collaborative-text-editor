@@ -1,7 +1,6 @@
 import type { ObjectId } from 'mongodb';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import * as Y from 'yjs';
 
 import { app } from '../../app.js';
 import { collections } from '../../config/mongodb.js';
@@ -349,22 +348,6 @@ describe('PATCH /api/documents/:id/members/:userId', () => {
 		);
 	});
 
-	it('takes effect right away: a demoted editor can no longer send updates', async () => {
-		const { document, users } = await setup();
-		const sendUpdate = () =>
-			request(app)
-				.post(`/api/documents/${document._id}/updates`)
-				.set(asUser(users.editor.id))
-				.set('Content-Type', 'application/octet-stream')
-				.send(Buffer.from(Y.encodeStateAsUpdate(new Y.Doc())));
-
-		expect((await sendUpdate()).status).toBe(204);
-
-		await changeRole(document._id, users.owner, users.editor.id, { role: 'viewer' });
-
-		expect((await sendUpdate()).status).toBe(403);
-	});
-
 	it('responds 400 when changing the owner', async () => {
 		const { document, users } = await setup();
 
@@ -428,13 +411,13 @@ describe('DELETE /api/documents/:id/members/:userId', () => {
 		expect(saved?.members).toHaveLength(2);
 	});
 
-	it('cuts access right away: the removed member gets 404 on the content', async () => {
+	it('cuts access right away: the removed member gets 404 on the document', async () => {
 		const { document, users } = await setup();
 
 		await removeMember(document._id, users.owner, users.viewer.id);
 
 		const response = await request(app)
-			.get(`/api/documents/${document._id}/content`)
+			.get(`/api/documents/${document._id}`)
 			.set(asUser(users.viewer.id));
 		expect(response.status).toBe(404);
 	});

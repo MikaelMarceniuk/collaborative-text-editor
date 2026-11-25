@@ -1,20 +1,12 @@
 import { ObjectId } from 'mongodb';
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
-import * as Y from 'yjs';
 
 import { app } from '../../app.js';
 import { collections } from '../../config/mongodb.js';
 import { asUser, createDocument, newUserId } from '../../test/helpers.js';
 
 vi.mock('../middleware/auth.middleware.js', () => import('../../test/mock-auth.js'));
-
-const validUpdate = () => {
-	const ydoc = new Y.Doc();
-	ydoc.getText('content').insert(0, 'hello');
-
-	return Buffer.from(Y.encodeStateAsUpdate(ydoc));
-};
 
 // One document with an owner, an editor and a viewer, and a user outside it
 const setup = async () => {
@@ -86,67 +78,6 @@ describe('GET /api/documents/:id', () => {
 		const response = await request(app).get('/api/documents/nope').set(asUser(newUserId()));
 
 		expect(response.status).toBe(404);
-	});
-});
-
-describe('GET /api/documents/:id/content', () => {
-	it.each([
-		['owner', 200],
-		['editor', 200],
-		['viewer', 200],
-		['stranger', 404],
-	] as const)('as %s responds %i', async (who, status) => {
-		const { document, users } = await setup();
-
-		const response = await request(app)
-			.get(`/api/documents/${document._id}/content`)
-			.set(asUser(users[who]));
-
-		expect(response.status).toBe(status);
-	});
-});
-
-describe('POST /api/documents/:id/updates', () => {
-	it.each([
-		['owner', 204],
-		['editor', 204],
-		['viewer', 403],
-		['stranger', 404],
-	] as const)('as %s responds %i', async (who, status) => {
-		const { document, users } = await setup();
-
-		const response = await request(app)
-			.post(`/api/documents/${document._id}/updates`)
-			.set(asUser(users[who]))
-			.set('Content-Type', 'application/octet-stream')
-			.send(validUpdate());
-
-		expect(response.status).toBe(status);
-	});
-
-	it('does not change the content when the viewer is rejected', async () => {
-		const { document, users } = await setup();
-
-		await request(app)
-			.post(`/api/documents/${document._id}/updates`)
-			.set(asUser(users.viewer))
-			.set('Content-Type', 'application/octet-stream')
-			.send(validUpdate());
-
-		const saved = await collections.documents.findOne({ _id: document._id });
-		expect(saved?.ydocState).toBeUndefined();
-	});
-
-	it('responds 400 for an invalid update', async () => {
-		const { document, users } = await setup();
-
-		const response = await request(app)
-			.post(`/api/documents/${document._id}/updates`)
-			.set(asUser(users.owner))
-			.set('Content-Type', 'application/octet-stream')
-			.send(Buffer.from([1, 2, 3]));
-
-		expect(response.status).toBe(400);
 	});
 });
 
