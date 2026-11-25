@@ -150,7 +150,7 @@ const setupMembers = async () => {
 		return socket;
 	};
 
-	return { document, owner, editor, viewer, open };
+	return { document, owner, editor, viewer, open, url };
 };
 
 describe('document sync', () => {
@@ -282,5 +282,128 @@ describe('persistence over the socket', () => {
 		const stored = new Y.Doc();
 		Y.applyUpdate(stored, await loadDocumentState(document._id));
 		expect(stored.getText('t').toString()).toBe('on shutdown');
+	});
+});
+
+// Resolves with the payload of the next `event` the socket receives
+const nextEvent = <T>(socket: Socket, event: string) =>
+	new Promise<T>((resolve) => socket.once(event, resolve));
+
+// Waits long enough for an event that should NOT arrive to show up
+const noEventWithin = async (socket: Socket, event: string, ms = 150) => {
+	const received = vi.fn();
+	socket.on(event, received);
+	await new Promise((resolve) => setTimeout(resolve, ms));
+	socket.off(event, received);
+	return received.mock.calls.length === 0;
+};
+
+describe('document awareness', () => {
+	const presence = (clientId: number, text = 'cursor') => ({
+		clientId,
+		update: new TextEncoder().encode(text),
+	});
+
+	// A socket that has finished joining the room, so it receives what the others send
+	const joinedSockets = async (
+		open: (user: { id: ObjectId }) => Promise<Socket>,
+		users: { id: ObjectId }[],
+	) => {
+		const sockets = await Promise.all(users.map(open));
+		await Promise.all(sockets.map((socket) => socket.emitWithAck('doc:sync', emptyStateVector())));
+		return sockets;
+	};
+
+	it('relays the presence to the other clients, but not back to the sender', async () => {
+		const { owner, editor, viewer, open } = await setupMembers();
+		const [ownerSocket, editorSocket, viewerSocket] = await joinedSockets(open, [
+			owner,
+			editor,
+			viewer,
+		]);
+
+		const ownerReceives = nextEvent<{ clientId: number; update: Uint8Array }>(
+			ownerSocket,
+			'awareness:update',
+		);
+		const viewerReceives = nextEvent<{ clientId: number; update: Uint8Array }>(
+			viewerSocket,
+			'awareness:update',
+		);
+		const editorGetsEcho = noEventWithin(editorSocket, 'awareness:update');
+		editorSocket.emit('awareness:update', presence(1, 'hello'));
+
+		for (const received of [await ownerReceives, await viewerReceives]) {
+			expect(received.clientId).toBe(1);
+			expect(new TextDecoder().decode(received.update)).toBe('hello');
+		}
+		expect(await editorGetsEcho).toBe(true);
+	});
+
+	it('lets a viewer send its presence', async () => {
+		const { owner, viewer, open } = await setupMembers();
+		const [ownerSocket, viewerSocket] = await joinedSockets(open, [owner, viewer]);
+
+		const ownerReceives = nextEvent<{ clientId: number }>(ownerSocket, 'awareness:update');
+		viewerSocket.emit('awareness:update', presence(7));
+
+		expect((await ownerReceives).clientId).toBe(7);
+	});
+
+	it('ignores malformed presence and keeps the connection', async () => {
+		const { owner, editor, open } = await setupMembers();
+		const [ownerSocket, editorSocket] = await joinedSockets(open, [owner, editor]);
+
+		const nothingArrives = noEventWithin(ownerSocket, 'awareness:update');
+		editorSocket.emit('awareness:update', 'nope');
+		editorSocket.emit('awareness:update', { clientId: 'x', update: new Uint8Array(1) });
+		editorSocket.emit('awareness:update', { clientId: 1.5, update: new Uint8Array(1) });
+		editorSocket.emit('awareness:update', { clientId: 1, update: 'not bytes' });
+		editorSocket.emit('awareness:update');
+
+		expect(await nothingArrives).toBe(true);
+		expect(editorSocket.connected).toBe(true);
+	});
+
+	it('keeps a socket to the first client id it used', async () => {
+		const { owner, editor, open } = await setupMembers();
+		const [ownerSocket, editorSocket] = await joinedSockets(open, [owner, editor]);
+
+		const first = nextEvent<{ clientId: number }>(ownerSocket, 'awareness:update');
+		editorSocket.emit('awareness:update', presence(1));
+		expect((await first).clientId).toBe(1);
+
+		const impersonation = noEventWithin(ownerSocket, 'awareness:update');
+		editorSocket.emit('awareness:update', presence(2));
+		expect(await impersonation).toBe(true);
+	});
+
+	it('relays a query to the others, but not back to the sender', async () => {
+		const { owner, editor, open } = await setupMembers();
+		const [ownerSocket, editorSocket] = await joinedSockets(open, [owner, editor]);
+
+		const ownerReceives = nextEvent<undefined>(ownerSocket, 'awareness:query');
+		const editorGetsEcho = noEventWithin(editorSocket, 'awareness:query');
+		editorSocket.emit('awareness:query');
+
+		await ownerReceives;
+		expect(await editorGetsEcho).toBe(true);
+	});
+
+	it('does not relay presence to another document', async () => {
+		const { owner, editor, open, url } = await setupMembers();
+		const [, editorSocket] = await joinedSockets(open, [owner, editor]);
+		const other = await createDocument({ ownerId: owner.id });
+		const { socket: otherSocket } = await connectToDocument({
+			url,
+			documentId: other._id.toHexString(),
+			userId: owner.id,
+		});
+		await otherSocket.emitWithAck('doc:sync', emptyStateVector());
+
+		const leaks = noEventWithin(otherSocket, 'awareness:update');
+		editorSocket.emit('awareness:update', presence(1));
+
+		expect(await leaks).toBe(true);
 	});
 });

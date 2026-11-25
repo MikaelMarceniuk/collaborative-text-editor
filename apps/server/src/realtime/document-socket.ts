@@ -1,6 +1,7 @@
 import type { Socket } from 'socket.io';
 
 import type { DocumentRole } from '../models/document.model.js';
+import { registerDocumentAwareness } from './document-awareness.js';
 import { type DocumentRooms, InvalidUpdateError } from './document-rooms.js';
 import { documentRoomName, memberRoomName } from './room-names.js';
 import type { DocumentSocketData } from './socket-auth.js';
@@ -27,6 +28,8 @@ export const registerDocumentSocket = (rooms: DocumentRooms, socket: Socket) => 
 	const data = socket.data as DocumentSocketData;
 	const { documentId, userId } = data;
 	const room = documentRoomName(documentId);
+
+	registerDocumentAwareness(socket);
 
 	const joined = (async () => {
 		await rooms.join(documentId);
