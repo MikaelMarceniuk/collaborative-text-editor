@@ -5,7 +5,9 @@ import { usePresence } from '@/hooks/use-presence.hook';
 import { useAuthenticatedSession } from '@/hooks/use-session.hook';
 import { getInitials } from '@/lib/user.lib';
 
+// The header is tight on a phone, so there fewer avatars fit. Both counts are rendered and CSS picks one
 const MAX_AVATARS = 4;
+const MAX_AVATARS_SMALL = 2;
 
 /** The other people in the document, with the same color as their cursor. */
 export const DocumentPresence = ({ awareness }: { awareness: Awareness }) => {
@@ -14,25 +16,36 @@ export const DocumentPresence = ({ awareness }: { awareness: Awareness }) => {
 
 	if (people.length === 0) return null;
 
-	const shown = people.slice(0, MAX_AVATARS);
-	const hidden = people.slice(MAX_AVATARS);
+	const namesOf = (list: typeof people) => list.map((person) => person.name).join(', ');
+	const hiddenLarge = people.slice(MAX_AVATARS);
+	const hiddenSmall = people.slice(MAX_AVATARS_SMALL);
 
 	return (
 		<AvatarGroup
 			role="group"
-			aria-label={`People in this document: ${people.map((person) => person.name).join(', ')}`}
-			className="mr-2 max-sm:hidden"
+			aria-label={`People in this document: ${namesOf(people)}`}
+			className="mr-1 shrink-0 sm:mr-2"
 		>
-			{shown.map((person) => (
-				<Avatar key={person.id} size="sm" title={person.name}>
+			{people.slice(0, MAX_AVATARS).map((person, index) => (
+				<Avatar
+					key={person.id}
+					size="sm"
+					title={person.name}
+					className={index >= MAX_AVATARS_SMALL ? 'max-sm:hidden' : undefined}
+				>
 					<AvatarFallback className="text-white" style={{ backgroundColor: person.color }}>
 						{getInitials(person.name)}
 					</AvatarFallback>
 				</Avatar>
 			))}
-			{hidden.length > 0 && (
-				<AvatarGroupCount title={hidden.map((person) => person.name).join(', ')}>
-					+{hidden.length}
+			{hiddenSmall.length > 0 && (
+				<AvatarGroupCount title={namesOf(hiddenSmall)} className="sm:hidden">
+					+{hiddenSmall.length}
+				</AvatarGroupCount>
+			)}
+			{hiddenLarge.length > 0 && (
+				<AvatarGroupCount title={namesOf(hiddenLarge)} className="max-sm:hidden">
+					+{hiddenLarge.length}
 				</AvatarGroupCount>
 			)}
 		</AvatarGroup>
