@@ -16,7 +16,8 @@ export default defineConfig({
 	},
 	server: {
 		proxy: {
-			'/api': 'http://localhost:3333',
+			// ws: true also proxies the document sockets (/api/socket.io)
+			'/api': { target: 'http://localhost:3333', ws: true },
 		},
 	},
 });
