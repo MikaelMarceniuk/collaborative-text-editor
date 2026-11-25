@@ -1,6 +1,6 @@
 # Tempo real com Socket.IO + Yjs
 
-> **Estado: plano**, ainda não implementado. A implementação segue a seção "Passos e commits": uma branch (`feat/realtime-sync`), um commit por passo.
+> **Estado: implementado** na branch `feat/realtime-sync`, um commit por passo da seção "Passos e commits". O que mudou na prática em relação ao plano está em "Diferenças do plano", no fim.
 
 Hoje o editor já guarda o conteúdo como Yjs e sincroniza por REST (`GET /content`, `POST /updates`, com debounce no cliente). Este plano troca só o **transporte**: o cliente passa a falar com o server por um socket, o server retransmite os updates para os outros clientes do documento e persiste no Mongo com debounce. O formato no banco (`ydocState` + `contentVersion`), o `applyDocumentUpdate` e a integração Tiptap + `Y.Doc` continuam como estão (ver `document-persistence.md`, "Transição para Share + Socket.IO").
 
@@ -170,3 +170,14 @@ Cada commit deixa o app funcionando (o REST só sai depois que o front migrou).
 - Testes E2E com dois navegadores (semana 6).
 - Histórico de versões e snapshots (V2).
 - Modo offline persistente com IndexedDB (V2); aqui o offline vale só enquanto a aba está aberta.
+
+## Diferenças do plano
+
+- **Mudança de papel e remoção derrubam o socket, em vez de atualizar `socket.data.role`.** O plano atualizava o papel em cache dos sockets do usuário. Mas `fetchSockets()` devolve cópias (e o `data` delas não volta para o socket), o que também não funcionaria com o Redis adapter. Agora toda mudança (`PATCH`, `DELETE` de membro, sair do documento) emite `doc:access-changed` e desconecta os sockets do usuário (`realtime/access-notifier.ts`). O cliente reconecta sozinho (o Socket.IO não reconecta depois de um disconnect do servidor, então `document-socket.lib.ts` chama `connect()`), e o handshake lê o papel novo ou responde `not_found`. Sem cache de papel em socket, o papel nunca vale mais que uma conexão.
+- **O papel que o cliente usa vem do ack do `doc:sync`**, não do `document` da query. Assim, depois de uma reconexão o cliente já sabe se pode enviar updates. Se o papel muda sem o aviso `doc:access-changed` ter chegado (conexão que caiu sozinha), o cliente também chama `onAccessChanged`.
+- **A API para as rotas é um singleton (`access-notifier.ts`), não injeção.** `memberChanged` e `documentDeleted`; sem socket server (testes de rota) são no-op. `documentDeleted` descarta a sala antes de desconectar, para os sockets saindo não gravarem o documento apagado de volta.
+- **`close()` do socket server desconecta primeiro e grava depois** (`io.close()` e então `rooms.flushAll()`), e não o contrário: depois que os sockets saem, nada mais chega à sala.
+- **Eventos de resposta ao `doc:sync` incluem `role`** (o plano só listava `update` e `stateVector`).
+- **Estado de salvamento do cliente** ficou em `saved | saving | offline`; "Couldn't save" saiu, porque não há mais gravação do cliente que possa falhar de forma isolada. A falha de conexão antes do primeiro sync vira `status: 'error'` com botão "Try again".
+- **Testes do `applyDocumentUpdate`** ganharam um arquivo próprio (`document-content.service.test.ts`): o que os testes de `POST /updates` cobriam (merge concorrente, update inválido) não tinha mais casa. O caso "editor rebaixado não envia mais updates" passou para `access-notifier.test.ts`.
+- **Validação com o cliente real do web:** um teste temporário (não commitado) rodou duas instâncias de `createDocumentSocket` contra o servidor: sincronização, retransmissão e convergência depois de o servidor derrubar todos os sockets com edições offline nos dois lados. Faltou a validação no navegador com duas janelas.
