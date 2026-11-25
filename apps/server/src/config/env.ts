@@ -23,6 +23,15 @@ const envSchema = z
 		MAIL_FROM: z.string().default('Collaborative Editor <onboarding@resend.dev>'),
 
 		WEB_URL: z.url().default('http://localhost:5173'),
+
+		// Optional: without it the server runs as a single instance (see docs/redis.md)
+		REDIS_URL: z.preprocess(
+			(value) => (value === '' ? undefined : value),
+			z
+				.string()
+				.regex(/^rediss?:\/\/\S+$/, 'Must be a redis:// or rediss:// URL')
+				.optional(),
+		),
 	})
 	.superRefine((data, ctx) => {
 		if (data.NODE_ENV !== 'development' && !data.RESEND_API_KEY) {

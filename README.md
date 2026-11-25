@@ -125,6 +125,8 @@ pnpm dev
 
 `Ctrl+C` stops the API and the web app but leaves MongoDB running. Use `pnpm dev:down` to stop it too.
 
+Redis is optional. Without `REDIS_URL` the API runs as a single instance and never tries to connect to it. To run several instances, set `REDIS_URL=redis://localhost:6379` in `apps/server/.env` and start with `pnpm dev:redis`, which also starts a Redis container.
+
 ### Tests
 
 ```bash
@@ -132,7 +134,7 @@ pnpm dev                                    # or: docker compose -f compose-dev.
 pnpm --filter @collaborative-text-editor/server test
 ```
 
-The server tests run against the local MongoDB, in a separate `collaborative-editor-test` database (override it with `TEST_MONGO_URL`).
+The server tests run against the local MongoDB, in a separate `collaborative-editor-test` database (override it with `TEST_MONGO_URL`). The tests that run two server instances need Redis and are skipped unless `TEST_REDIS_URL` is set (`docker compose -f compose-dev.yml --profile redis up -d --wait`, then `TEST_REDIS_URL=redis://localhost:6379`). CI always runs them.
 
 ## Roadmap
 
