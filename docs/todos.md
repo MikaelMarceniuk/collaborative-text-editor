@@ -30,5 +30,6 @@ Hoje o `sessionLoader` (rota raiz) só roda no primeiro acesso/F5 e depois de si
 ## Tempo real (`apps/server`)
 
 - [ ] **Salas entre instâncias (semana 6)**: cada instância tem sua sala em memória por documento. A gravação por merge continua correta, mas o Redis adapter só retransmite entre sockets. As salas das outras instâncias precisam receber os updates também (`serverSideEmit` ou um assinante por sala).
+- [ ] **Presença: rate limit e `awareness:left` entre instâncias**: o cursor manda ~20 mensagens por segundo por pessoa (o cliente limita a 1 por 50ms, o server não confere). Com várias instâncias, o `awareness:left` depende de a instância do socket que caiu emitir; se ela cair sem emitir, o timeout de 30s do `Awareness` limpa o cursor. Entra junto com o rate limit por socket abaixo.
 - [ ] **Rate limit por socket**: hoje o único limite é o tamanho da mensagem (`maxHttpBufferSize`, 2 MB). Um cliente pode mandar updates sem parar.
 - [ ] **Confirmar WebSocket em produção**: o caminho que roteia `/api` para o Fly precisa aceitar o upgrade em `/api/socket.io`. Só dá para validar no primeiro deploy.
