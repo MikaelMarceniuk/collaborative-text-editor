@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { ObjectId } from 'mongodb';
 import { z } from 'zod';
 
 import { collections } from '../../config/mongodb.js';
@@ -103,4 +104,47 @@ documentMembersRouter.post('/', documentAccess({ minRole: 'owner' }), async (req
 			image: invitedUser.image ?? undefined,
 		},
 	});
+});
+
+// Route params can be typed as string | string[], hence the typeof check
+const parseUserId = (value: unknown) =>
+	typeof value === 'string' && ObjectId.isValid(value) ? new ObjectId(value) : null;
+
+const updateMemberSchema = z.object({
+	role: z.enum(['editor', 'viewer']),
+});
+
+documentMembersRouter.patch('/:userId', documentAccess({ minRole: 'owner' }), async (req, res) => {
+	const memberId = parseUserId(req.params.userId);
+	if (!memberId) {
+		res.status(404).json({ error: 'Member not found' });
+		return;
+	}
+
+	const parsed = updateMemberSchema.safeParse(req.body);
+	if (!parsed.success) {
+		res.status(400).json({ error: z.prettifyError(parsed.error) });
+		return;
+	}
+
+	// Only the owner reaches this point, and the owner is the only one with the "owner" role
+	if (memberId.equals(res.locals.user.id)) {
+		res.status(400).json({ error: "The owner's role cannot be changed" });
+		return;
+	}
+
+	const { role } = parsed.data;
+
+	const result = await collections.documents.updateOne(
+		{ _id: res.locals.documentId, 'members.userId': memberId },
+		{ $set: { 'members.$[member].role': role } },
+		{ arrayFilters: [{ 'member.userId': memberId }] },
+	);
+
+	if (result.matchedCount === 0) {
+		res.status(404).json({ error: 'Member not found' });
+		return;
+	}
+
+	res.json({ member: { userId: memberId, role } });
 });
