@@ -29,7 +29,7 @@ Hoje o `sessionLoader` (rota raiz) só roda no primeiro acesso/F5 e depois de si
 
 ## Tempo real (`apps/server`)
 
-- [x] **Salas entre instâncias (semana 6)**: feito com `serverSideEmit` (`room-peers.ts`), ver `docs/redis.md`. Pendente só a validação com navegadores de verdade, no E2E.
+- [x] **Salas entre instâncias (semana 6)**: feito com `serverSideEmit` (`room-peers.ts`), ver `docs/redis.md`. Validado com navegadores de verdade no E2E (`apps/e2e/tests/multi-instance.spec.ts`, `docs/e2e.md`).
 - [ ] **Presença: rate limit e `awareness:left` entre instâncias**: o cursor manda até ~60 mensagens por segundo por pessoa (o cliente limita a 1 por frame, 16ms; o server não confere). Com várias instâncias, o `awareness:left` depende de a instância do socket que caiu emitir; se ela cair sem emitir, o timeout de 30s do `Awareness` limpa o cursor. Entra junto com o rate limit por socket abaixo.
 - [ ] **Rate limit por socket**: hoje o único limite é o tamanho da mensagem (`maxHttpBufferSize`, 2 MB). Um cliente pode mandar updates sem parar.
 - [ ] **Confirmar WebSocket em produção**: o caminho que roteia `/api` para o Fly precisa aceitar o upgrade em `/api/socket.io`. Só dá para validar no primeiro deploy.
