@@ -39,12 +39,15 @@ interface DocumentSyncOptions {
 	documentId: string;
 	ydoc: Y.Doc;
 	onSaveStatusChange: (status: SaveStatus) => void;
+	// The server said this user can no longer edit (403) or see (404) the document
+	onAccessLost?: () => void;
 }
 
 export const createDocumentSync = ({
 	documentId,
 	ydoc,
 	onSaveStatusChange,
+	onAccessLost,
 }: DocumentSyncOptions) => {
 	let pendingUpdates: Uint8Array[] = [];
 	let savesInFlightCount = 0;
@@ -111,6 +114,10 @@ export const createDocumentSync = ({
 				} else {
 					hasFailedPermanently = true;
 					console.error('Could not save the document:', error);
+
+					if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
+						onAccessLost?.();
+					}
 				}
 			})
 			.finally(() => {
