@@ -17,7 +17,8 @@ export default defineConfig({
 	server: {
 		proxy: {
 			// ws: true also proxies the document sockets (/api/socket.io)
-			'/api': { target: 'http://localhost:3333', ws: true },
+			// API_URL lets the E2E point each web instance at its own server (see docs/e2e.md)
+			'/api': { target: process.env.API_URL ?? 'http://localhost:3333', ws: true },
 		},
 	},
 });
