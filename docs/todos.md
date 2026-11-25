@@ -12,3 +12,15 @@ Hoje o `sessionLoader` (rota raiz) só roda no primeiro acesso/F5 e depois de si
   - Deduplicar: várias requests com 401 ao mesmo tempo devem gerar um único toast + revalidate.
 - [ ] **Revalidar ao voltar o foco da aba**: listener de `visibilitychange` na rota raiz chamando `revalidate()`. Pega a aba esquecida aberta antes de o usuário voltar a mexer.
 - [ ] **Revalidação periódica da sessão**: agendar `revalidate()` para `session.expiresAt` (reagendar a cada nova sessão carregada). Lembrar que o better-auth renova a sessão a cada dia de uso (`updateAge`), então o `expiresAt` muda.
+
+## Infra / dev
+
+- [x] **Mongo local como replica set**: o adapter do better-auth abre transação sempre que recebe o `client` (sign-up por email cria `user` + `account` juntos), e transação só funciona em replica set. Com o container `mongo:8` standalone, o `POST /api/auth/sign-up/email` responde 500 (`Transaction numbers are only allowed on a replica set member or mongos`). Hoje o dev usa o Atlas, que já é replica set.
+  - Subir o container como replica set de um nó: `mongo:8 --replSet rs0 --bind_ip_all` + `rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] })` uma única vez, e usar `?directConnection=true` no `MONGO_URL`.
+  - Colocar isso no futuro `docker-compose.yml` (com healthcheck que roda o `rs.initiate` se ainda não tiver sido feito), para o ambiente subir pronto.
+  - Não usar `transaction: false` no adapter como atalho: o dev ficaria diferente da produção.
+
+## Guest (`apps/server`)
+
+- [ ] **Membro duplicado ao juntar documentos**: quando existir compartilhamento, o guest pode entrar numa conta que já é membro de um documento dele. O `transferGuestDocuments` deixaria dois membros com o mesmo `userId`. Juntar as participações e ficar com o papel mais alto.
+- [ ] **Índice em `session.userId`**: o job de guests abandonados faz `$lookup` em `session` por `userId`. Conferir se o better-auth cria esse índice no Mongo; se não, criar (`{ userId: 1, expiresAt: 1 }`).

@@ -91,12 +91,24 @@ apps/
         └── pages/       # routes
 ```
 
-<!--
 ## Running locally
 
-TODO (v0.2): Docker Compose with MongoDB as a replica set + `pnpm dev`.
-See docs/local-development.md
--->
+Requires Node 24, pnpm and Docker.
+
+```bash
+pnpm install
+cp apps/server/.env.example apps/server/.env   # set BETTER_AUTH_SECRET (openssl rand -base64 32)
+pnpm dev
+```
+
+- Web: http://localhost:5173
+- API: http://localhost:3333 (Vite proxies `/api` to it)
+
+`pnpm dev` starts MongoDB in Docker, then the API and the web app in the same terminal. MongoDB runs as a single-node replica set because Better Auth uses transactions on sign-up. The data lives in `.docker-data/`.
+
+`RESEND_API_KEY` is optional in development: verification emails are printed in the API's console instead of being sent. Or skip sign-up entirely with **"Continue as guest"**.
+
+`Ctrl+C` stops the API and the web app but leaves MongoDB running. Use `pnpm dev:down` to stop it too.
 
 ## Roadmap
 
@@ -108,7 +120,7 @@ See docs/local-development.md
 - [ ] Real-time collaboration over WebSocket
 - [ ] Live presence: other users' cursors and selections
 - [ ] Share documents by email with roles
-- [ ] One-command local setup with Docker Compose
+- [x] One-command local setup with Docker Compose
 - [ ] Integration and E2E tests (two browsers editing the same document)
 - [ ] Version history with snapshots
 
