@@ -3,7 +3,8 @@
 	"version": "1.0.0",
 	"scripts": {
 		"dev": "docker compose -f compose-dev.yml up -d --wait && pnpm --parallel -r start:dev",
-		"dev:down": "docker compose -f compose-dev.yml down"
+		"dev:redis": "docker compose -f compose-dev.yml --profile redis up -d --wait && pnpm --parallel -r start:dev",
+		"dev:down": "docker compose -f compose-dev.yml --profile redis down"
 	},
 	"keywords": [],
 	"author": "Mikael Campos Marceniuk",

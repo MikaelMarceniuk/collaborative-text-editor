@@ -16,8 +16,13 @@ jobs:
         image: mongo:8
         ports:
           - 27017:27017
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
     env:
       TEST_MONGO_URL: mongodb://localhost:27017/collaborative-editor-test
+      TEST_REDIS_URL: redis://localhost:6379
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4

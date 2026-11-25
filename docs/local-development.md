@@ -89,3 +89,12 @@ pnpm dev
 ## Testes do server
 
 `pnpm --filter @collaborative-text-editor/server test` roda o Vitest contra o Mongo do `compose-dev.yml`, no banco `collaborative-editor-test` (a porta vem do `MONGO_PORT` do `.env` da raiz; `TEST_MONGO_URL` sobrescreve a URL inteira). O `src/test/setup.ts` recusa rodar em qualquer banco cujo nome não termine em `-test`, porque limpa as coleções a cada teste. No CI, o `server-ci.yml` sobe um `mongo:8` como service.
+
+## Redis (opcional)
+
+O Redis só é preciso para rodar mais de uma instância do server (ver `docs/redis.md`). Sem `REDIS_URL` o server nem tenta conectar.
+
+- No `compose-dev.yml` o serviço `redis` está no profile `redis`, então o `pnpm dev` normal não o sobe. Sem persistência (`--save "" --appendonly no`): ele só leva mensagens entre instâncias.
+- `pnpm dev:redis` sobe Mongo e Redis e depois server e web. Coloque `REDIS_URL=redis://localhost:6379` no `apps/server/.env`. A porta vem do `REDIS_PORT` do `.env` da raiz (padrão 6379), como o `MONGO_PORT`.
+- `pnpm dev:down` derruba os dois (usa `--profile redis`).
+- Os testes que simulam duas instâncias rodam só com `TEST_REDIS_URL` (por exemplo `redis://localhost:6379`); sem ela são pulados, e o resto da suíte não precisa de Redis. O `server-ci.yml` sobe um `redis:7-alpine` como service e define a variável.

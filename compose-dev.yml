@@ -16,3 +16,17 @@ services:
       timeout: 10s
       retries: 10
       start_period: 10s
+
+  # Optional: only needed to run more than one server instance (see docs/redis.md).
+  # Start it with `pnpm dev:redis`. It keeps nothing on disk: Redis is only a message bus
+  redis:
+    image: redis:7-alpine
+    profiles: ["redis"]
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
