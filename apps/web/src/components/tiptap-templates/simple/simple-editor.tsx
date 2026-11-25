@@ -275,7 +275,8 @@ export function SimpleEditor({ document, ydoc, saveStatus }: SimpleEditorProps) 
 			<EditorContext.Provider value={{ editor }}>
 				<DocumentHeader
 					document={document}
-					saveStatus={canEdit ? saveStatus : undefined}
+					// A viewer has nothing to save, but still wants to know that the live updates stopped
+					saveStatus={canEdit || saveStatus === 'offline' ? saveStatus : undefined}
 					isViewOnly={!canEdit}
 					onTitleDone={() => editor?.commands.focus()}
 					isSearchAndReplaceOpen={isSearchAndReplaceOpen}
