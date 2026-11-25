@@ -10,6 +10,7 @@ import {
 	loadDocumentState,
 } from '../../services/document-content.service.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
+import { documentAccess } from '../middleware/document-access.middleware.js';
 
 export const documentRouter = Router();
 
@@ -46,17 +47,9 @@ documentRouter.get('/', async (_req, res) => {
 	res.json({ documents });
 });
 
-documentRouter.get('/:id', async (req, res) => {
-	const documentId = parseDocumentId(req.params.id);
-	if (!documentId) {
-		res.status(404).json({ error: 'Document not found' });
-		return;
-	}
-
-	const userId = new ObjectId(res.locals.user.id);
-
+documentRouter.get('/:id', documentAccess(), async (_req, res) => {
 	const document = await collections.documents.findOne(
-		{ _id: documentId, 'members.userId': userId },
+		{ _id: res.locals.documentId },
 		{ projection: { ydocState: 0 } },
 	);
 
@@ -68,21 +61,8 @@ documentRouter.get('/:id', async (req, res) => {
 	res.json({ document });
 });
 
-documentRouter.get('/:id/content', async (req, res) => {
-	const documentId = parseDocumentId(req.params.id);
-	if (!documentId) {
-		res.status(404).json({ error: 'Document not found' });
-		return;
-	}
-
-	const userId = new ObjectId(res.locals.user.id);
-	const role = await findMemberRole(documentId, userId);
-	if (!role) {
-		res.status(404).json({ error: 'Document not found' });
-		return;
-	}
-
-	const state = await loadDocumentState(documentId);
+documentRouter.get('/:id/content', documentAccess(), async (_req, res) => {
+	const state = await loadDocumentState(res.locals.documentId);
 
 	res.type('application/octet-stream').send(Buffer.from(state));
 });
