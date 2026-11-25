@@ -391,6 +391,21 @@ describe('document awareness', () => {
 		expect(await editorGetsEcho).toBe(true);
 	});
 
+	it('relays the presence after the document update that was sent before it', async () => {
+		const { owner, editor, open } = await setupMembers();
+		const [ownerSocket, editorSocket] = await joinedSockets(open, [owner, editor]);
+
+		// A cursor points at text the others only have once the update that wrote it arrives
+		const order: string[] = [];
+		ownerSocket.on('doc:update', () => order.push('update'));
+		ownerSocket.on('awareness:update', () => order.push('presence'));
+		editorSocket.emit('doc:update', textUpdate('hello'));
+		editorSocket.emit('awareness:update', presence(1));
+
+		await vi.waitFor(() => expect(order).toHaveLength(2));
+		expect(order).toEqual(['update', 'presence']);
+	});
+
 	it('does not relay presence to another document', async () => {
 		const { owner, editor, open, url } = await setupMembers();
 		const [, editorSocket] = await joinedSockets(open, [owner, editor]);

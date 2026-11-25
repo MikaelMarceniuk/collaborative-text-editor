@@ -24,7 +24,11 @@ const isAwarenessMessage = (value: unknown): value is AwarenessMessage => {
  * Presence is not content, so every member can send it, viewers included. Nothing here waits for an ack, and anything
  * malformed is ignored without dropping the connection.
  */
-export const registerDocumentAwareness = (socket: Socket) => {
+export const registerDocumentAwareness = (
+	socket: Socket,
+	// Resolves when the updates this socket already sent have been applied and relayed
+	afterUpdates: () => Promise<void>,
+) => {
 	const { documentId } = socket.data as DocumentSocketData;
 	const room = documentRoomName(documentId);
 
@@ -34,14 +38,18 @@ export const registerDocumentAwareness = (socket: Socket) => {
 	// of a tab that is closing can show up after "disconnecting". Relaying it then would leave a cursor nobody removes
 	let gone = false;
 
-	socket.on('awareness:update', (message: unknown) => {
+	socket.on('awareness:update', async (message: unknown) => {
 		if (gone || !isAwarenessMessage(message)) return;
 
 		clientId ??= message.clientId;
 		if (message.clientId !== clientId) return;
 
-		// Old cursor positions are worthless, so a busy or dropped connection may skip them
-		socket.volatile.to(room).emit('awareness:update', message);
+		// A cursor refers to text by its Yjs position, so it only makes sense to the others once the update that
+		// wrote that text has reached them. Awaiting the same promise keeps the presence messages in order
+		await afterUpdates();
+		if (gone) return;
+
+		socket.to(room).emit('awareness:update', message);
 	});
 
 	socket.on('awareness:query', () => {
