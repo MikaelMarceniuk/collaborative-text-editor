@@ -11,19 +11,10 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-	canEditDocument,
-	type DocumentRole,
-	type DocumentSummary,
-} from '@/hooks/use-documents.hook';
+import { canEditDocument, type DocumentSummary } from '@/hooks/use-documents.hook';
 import { useAuthenticatedSession } from '@/hooks/use-session.hook';
 import { formatRelativeTime } from '@/lib/date.lib';
-
-const ROLE_LABELS: Record<DocumentRole, string> = {
-	owner: 'Owner',
-	editor: 'Can edit',
-	viewer: 'View only',
-};
+import { ROLE_LABELS } from '@/lib/document-role.lib';
 
 // React events bubble through portals, so without this a click or key press inside the menu
 // would also select the item (opening the document) or move the list selection.
@@ -32,10 +23,11 @@ const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
 interface DocumentItemProps {
 	document: DocumentSummary;
 	onRename: (document: DocumentSummary) => void;
+	onShare: (document: DocumentSummary) => void;
 	onDelete: (document: DocumentSummary) => void;
 }
 
-export const DocumentItem = ({ document, onRename, onDelete }: DocumentItemProps) => {
+export const DocumentItem = ({ document, onRename, onShare, onDelete }: DocumentItemProps) => {
 	const { user } = useAuthenticatedSession();
 	const navigate = useNavigate();
 
@@ -75,7 +67,7 @@ export const DocumentItem = ({ document, onRename, onDelete }: DocumentItemProps
 							<IconPencil />
 							Rename
 						</DropdownMenuItem>
-						<DropdownMenuItem disabled>
+						<DropdownMenuItem onClick={() => onShare(document)}>
 							<IconShare />
 							Share
 						</DropdownMenuItem>
