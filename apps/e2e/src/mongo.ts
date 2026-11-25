@@ -36,3 +36,17 @@ export async function savedVersionOf(documentId: string) {
 		await client.close();
 	}
 }
+
+export async function documentExists(documentId: string) {
+	const client = new MongoClient(mongoUrl);
+	try {
+		const count = await client
+			.db()
+			.collection('documents')
+			.countDocuments({ _id: new ObjectId(documentId) });
+
+		return count > 0;
+	} finally {
+		await client.close();
+	}
+}
