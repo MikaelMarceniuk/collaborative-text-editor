@@ -3,6 +3,7 @@ import type { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
 
 import { env } from '../config/env.js';
+import { authenticateSocket } from './socket-auth.js';
 
 export const SOCKET_PATH = '/api/socket.io';
 
@@ -17,6 +18,8 @@ export const createSocketServer = (httpServer: HttpServer) => {
 		maxHttpBufferSize: MAX_MESSAGE_BYTES,
 		cors: { origin: env.WEB_URL, credentials: true },
 	});
+
+	io.use(authenticateSocket);
 
 	return {
 		io,

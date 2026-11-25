@@ -1,8 +1,8 @@
 import type { RequestHandler } from 'express';
 import { ObjectId } from 'mongodb';
 
-import { collections } from '../../config/mongodb.js';
 import type { DocumentRole } from '../../models/document.model.js';
+import { findMemberRole } from '../../services/find-member-role.js';
 
 declare global {
 	namespace Express {
@@ -39,11 +39,7 @@ export const documentAccess =
 		const documentId = new ObjectId(id);
 		const userId = new ObjectId(res.locals.user.id);
 
-		const document = await collections.documents.findOne(
-			{ _id: documentId, 'members.userId': userId },
-			{ projection: { members: 1 } },
-		);
-		const role = document?.members.find((member) => member.userId.equals(userId))?.role;
+		const role = await findMemberRole(documentId, userId);
 
 		if (!role) {
 			res.status(404).json({ error: 'Document not found' });
