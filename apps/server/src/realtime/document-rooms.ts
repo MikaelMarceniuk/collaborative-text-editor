@@ -2,6 +2,7 @@ import type { ObjectId } from 'mongodb';
 import * as Y from 'yjs';
 
 import { applyDocumentUpdate, loadDocumentState } from '../services/document-content.service.js';
+import { noopRoomPeers, type RoomPeers } from './room-peers.js';
 
 export class InvalidUpdateError extends Error {}
 
@@ -30,6 +31,8 @@ interface DocumentRoomsOptions {
 	retryBaseMs?: number;
 	retryMaxMs?: number;
 	save?: (params: { documentId: ObjectId; update: Uint8Array }) => Promise<void>;
+	/** The rooms of the other server instances. Without Redis there are none. */
+	peers?: RoomPeers;
 }
 
 /**
@@ -44,13 +47,25 @@ export const createDocumentRooms = ({
 	retryBaseMs = 1000,
 	retryMaxMs = 30_000,
 	save = applyDocumentUpdate,
+	peers = noopRoomPeers,
 }: DocumentRoomsOptions = {}) => {
 	// Keyed by the hex id. Holds the promise, so two simultaneous joins share one load
 	const rooms = new Map<string, Promise<Room>>();
+	// The rooms that finished loading. Another instance asking for the state must not wait for a room that is
+	// still loading: that room may be waiting for the answer of the one asking (two clients opening the same
+	// document on two instances at once), and it has no edits of its own yet anyway
+	const loaded = new Map<string, Room>();
 
 	const load = async (documentId: ObjectId): Promise<Room> => {
+		// What another instance has not saved yet is not in Mongo, so it is asked for too. A failure here fails
+		// the load: starting from a state that may be missing updates would leave the client with a broken document
+		const [saved, fromPeers] = await Promise.all([
+			loadDocumentState(documentId),
+			peers.requestState(documentId),
+		]);
 		const ydoc = new Y.Doc();
-		Y.applyUpdate(ydoc, await loadDocumentState(documentId));
+		Y.applyUpdate(ydoc, saved);
+		for (const state of fromPeers) Y.applyUpdate(ydoc, state);
 
 		return {
 			key: documentId.toHexString(),
@@ -72,7 +87,13 @@ export const createDocumentRooms = ({
 			room = load(documentId);
 			rooms.set(key, room);
 			// A failed load must not stay in the map, or every later join would get the same rejection
-			room.catch(() => rooms.delete(key));
+			room.then(
+				(loadedRoom) => {
+					// Unless it was dropped while loading
+					if (rooms.get(key) === room) loaded.set(key, loadedRoom);
+				},
+				() => rooms.delete(key),
+			);
 		}
 
 		return room;
@@ -91,6 +112,7 @@ export const createDocumentRooms = ({
 
 		clearTimers(room);
 		rooms.delete(room.key);
+		loaded.delete(room.key);
 	};
 
 	const scheduleRetry = (room: Room) => {
@@ -193,6 +215,30 @@ export const createDocumentRooms = ({
 
 			room.pending.push(update);
 			scheduleSave(room);
+			peers.publishUpdate(documentId, update);
+		},
+
+		/**
+		 * An update another instance applied. Only this instance's Y.Doc is brought up to date: the instance that
+		 * received the update is the one that saves it. Waits for a room that is still loading, and ignores
+		 * the update when there is no room (whoever opens the document later asks the other instances for its state).
+		 */
+		applyRemoteUpdate: async (documentId: ObjectId, update: Uint8Array) => {
+			const room = await rooms.get(documentId.toHexString())?.catch(() => undefined);
+			if (!room) return;
+
+			try {
+				Y.applyUpdate(room.ydoc, update);
+			} catch {
+				// The sender validated it before publishing, so this is not expected
+			}
+		},
+
+		/** The state of the room, for another instance that is opening the document. Null when there is no room, or it is still loading. */
+		stateOf: async (documentId: ObjectId) => {
+			const room = loaded.get(documentId.toHexString());
+
+			return room ? Y.encodeStateAsUpdate(room.ydoc) : null;
 		},
 
 		/** Saves every room now (shutdown). A room whose save fails keeps its updates but is not retried here. */
@@ -214,6 +260,7 @@ export const createDocumentRooms = ({
 			room.pending = [];
 			clearTimers(room);
 			rooms.delete(key);
+			loaded.delete(key);
 		},
 
 		/** Number of active rooms, for tests. */

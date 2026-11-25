@@ -6,7 +6,9 @@ import { io as connect, type Socket } from 'socket.io-client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 
+import { collections } from '../config/mongodb.js';
 import { connectToRedis } from '../config/redis.js';
+import { loadDocumentState } from '../services/document-content.service.js';
 import { asUser, createDocument, createUser } from '../test/helpers.js';
 import { testRedisUrl } from '../test/redis.js';
 import { createSocketServer, SOCKET_PATH } from './socket-server.js';
@@ -134,5 +136,76 @@ describe.skipIf(!testRedisUrl)('document sockets across instances', () => {
 		socketA.disconnect();
 
 		expect(await left).toBe(7);
+	});
+});
+
+describe.skipIf(!testRedisUrl)('document rooms across instances', () => {
+	it('gives a client that opens the document on another instance the edits that are not saved yet', async () => {
+		const [owner, editor] = await Promise.all([createUser(), createUser()]);
+		const document = await createDocument({
+			ownerId: owner.id,
+			members: [{ userId: editor.id, role: 'editor' }],
+		});
+		const [instanceA, instanceB] = [await startInstance(), await startInstance()];
+		const socketA = await openDocument(instanceA, document._id, owner.id);
+		await socketA.emitWithAck('doc:sync', emptyStateVector());
+		await socketA.emitWithAck('doc:update', textUpdate('not saved yet'));
+		// The save waits 2s after the last update, so Mongo does not have it
+		expect(readText(await loadDocumentState(document._id))).toBe('');
+
+		const socketB = await openDocument(instanceB, document._id, editor.id);
+		const response = await socketB.emitWithAck('doc:sync', emptyStateVector());
+
+		expect(readText(response.update)).toBe('not saved yet');
+	});
+
+	it('keeps the room of another instance up to date, for whoever joins it later', async () => {
+		const { document, instanceB, socketA } = await setupTwoInstances();
+		const third = await createUser();
+		await collections.documents.updateOne(
+			{ _id: document._id },
+			{ $push: { members: { userId: third.id, role: 'viewer' } } },
+		);
+
+		await socketA.emitWithAck('doc:update', textUpdate('edited on A'));
+		expect(readText(await loadDocumentState(document._id))).toBe('');
+
+		// The room of instance B was open before the edit, so it only gets it through the other instance
+		const socketC = await openDocument(instanceB, document._id, third.id);
+		const response = await socketC.emitWithAck('doc:sync', emptyStateVector());
+
+		expect(readText(response.update)).toBe('edited on A');
+	});
+
+	it('opens the same document on two instances at once without the rooms waiting for each other', async () => {
+		const [owner, editor] = await Promise.all([createUser(), createUser()]);
+		const document = await createDocument({
+			ownerId: owner.id,
+			members: [{ userId: editor.id, role: 'editor' }],
+		});
+		const [instanceA, instanceB] = [await startInstance(), await startInstance()];
+		const started = Date.now();
+
+		const [socketA, socketB] = await Promise.all([
+			openDocument(instanceA, document._id, owner.id),
+			openDocument(instanceB, document._id, editor.id),
+		]);
+		const responses = await Promise.all(
+			[socketA, socketB].map((socket) => socket.emitWithAck('doc:sync', emptyStateVector())),
+		);
+
+		expect(responses.map((response) => response.ok)).toEqual([true, true]);
+		// A room that waited for the other would only give up after the 2s timeout
+		expect(Date.now() - started).toBeLessThan(1500);
+	});
+
+	it('lets an instance with a room save only what its own clients sent', async () => {
+		const { document, socketA, socketB } = await setupTwoInstances();
+		await socketA.emitWithAck('doc:update', textUpdate('written on A'));
+		// Close B first: it holds the update of A, but it is not the one that has to save it
+		socketB.disconnect();
+		await new Promise((resolve) => setTimeout(resolve, 200));
+
+		expect(readText(await loadDocumentState(document._id))).toBe('');
 	});
 });
