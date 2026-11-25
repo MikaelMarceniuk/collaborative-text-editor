@@ -15,11 +15,18 @@ export const collections = {
 	documents: db.collection<DocumentModel>('documents'),
 };
 
+// createIndex is idempotent: it does nothing when the index already exists
+export async function ensureIndexes() {
+	// Serves the documents list: filter by member, newest first
+	await collections.documents.createIndex({ 'members.userId': 1, updatedAt: -1 });
+}
+
 export async function connectToMongo(maxAttempts = 3, delayMs = 2000) {
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		try {
 			await mongoClient.connect();
 			await db.command({ ping: 1 });
+			await ensureIndexes();
 			console.log(`MongoDB connected to database "${db.databaseName}"`);
 			return;
 		} catch (error) {
