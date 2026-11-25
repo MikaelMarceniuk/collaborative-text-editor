@@ -54,3 +54,10 @@ export async function removeMember(owner: Person, documentId: string, member: Pe
 	);
 	await expectOk(response);
 }
+
+export async function deleteDocument(owner: Person, documentId: string) {
+	const response = await owner.request.delete(`/api/documents/${documentId}`, {
+		headers: { origin: owner.origin },
+	});
+	await expectOk(response);
+}
