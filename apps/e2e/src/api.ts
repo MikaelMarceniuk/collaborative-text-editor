@@ -24,3 +24,33 @@ export async function inviteMember(owner: Person, documentId: string, guest: Per
 	});
 	await expectOk(response);
 }
+
+/** The id the server knows the person by (the members routes use it). */
+export async function userIdOf(person: Person) {
+	const response = await person.request.get('/api/auth/get-session');
+	await expectOk(response);
+
+	const session = (await response.json()) as { user: { id: string } };
+	return session.user.id;
+}
+
+export async function changeMemberRole(
+	owner: Person,
+	documentId: string,
+	member: Person,
+	role: Role,
+) {
+	const response = await owner.request.patch(
+		`/api/documents/${documentId}/members/${await userIdOf(member)}`,
+		{ data: { role }, headers: { origin: owner.origin } },
+	);
+	await expectOk(response);
+}
+
+export async function removeMember(owner: Person, documentId: string, member: Person) {
+	const response = await owner.request.delete(
+		`/api/documents/${documentId}/members/${await userIdOf(member)}`,
+		{ headers: { origin: owner.origin } },
+	);
+	await expectOk(response);
+}
