@@ -13,12 +13,14 @@ import { SaveStatusIndicator } from '@/components/save-status-indicator';
 import { ShareDocumentDialog } from '@/components/share-document-dialog';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { ViewOnlyIndicator } from '@/components/view-only-indicator';
 import type { DocumentSummary } from '@/hooks/use-documents.hook';
 import type { SaveStatus } from '@/lib/document-sync.lib';
 
 interface DocumentHeaderProps {
 	document: DocumentSummary;
 	saveStatus?: SaveStatus;
+	isViewOnly?: boolean;
 	onTitleDone: () => void;
 	isSearchAndReplaceOpen: boolean;
 	onSearchAndReplaceClick: () => void;
@@ -28,6 +30,7 @@ interface DocumentHeaderProps {
 export const DocumentHeader = ({
 	document,
 	saveStatus,
+	isViewOnly,
 	onTitleDone,
 	isSearchAndReplaceOpen,
 	onSearchAndReplaceClick,
@@ -54,6 +57,7 @@ export const DocumentHeader = ({
 			</div>
 
 			<div className="flex shrink-0 items-center gap-1">
+				{isViewOnly && <ViewOnlyIndicator />}
 				{saveStatus && <SaveStatusIndicator status={saveStatus} />}
 				<Button variant="outline" size="sm" onClick={() => setIsShareDialogOpen(true)}>
 					<IconShare />

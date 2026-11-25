@@ -3,7 +3,11 @@ import * as Y from 'yjs';
 
 import { createDocumentSync, REMOTE_ORIGIN, type SaveStatus } from '@/lib/document-sync.lib';
 
-export const useDocumentSync = (documentId: string, initialContent: Uint8Array) => {
+export const useDocumentSync = (
+	documentId: string,
+	initialContent: Uint8Array,
+	{ canEdit }: { canEdit: boolean },
+) => {
 	const [ydoc] = useState(() => {
 		const doc = new Y.Doc();
 		Y.applyUpdate(doc, initialContent, REMOTE_ORIGIN);
@@ -12,6 +16,9 @@ export const useDocumentSync = (documentId: string, initialContent: Uint8Array) 
 	const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
 
 	useEffect(() => {
+		// Viewers never send anything: the server would answer 403 to every update
+		if (!canEdit) return;
+
 		const sync = createDocumentSync({ documentId, ydoc, onSaveStatusChange: setSaveStatus });
 
 		const handleVisibilityChange = () => {
@@ -30,7 +37,7 @@ export const useDocumentSync = (documentId: string, initialContent: Uint8Array) 
 			window.removeEventListener('beforeunload', handleBeforeUnload);
 			sync.destroy();
 		};
-	}, [documentId, ydoc]);
+	}, [documentId, ydoc, canEdit]);
 
 	return { ydoc, saveStatus };
 };
