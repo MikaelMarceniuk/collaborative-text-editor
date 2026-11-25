@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { collections } from '../../config/mongodb.js';
 import type { DocumentModel } from '../../models/document.model.js';
+import { accessNotifier } from '../../realtime/access-notifier.js';
 import {
 	applyDocumentUpdate,
 	InvalidDocumentUpdateError,
@@ -119,6 +120,7 @@ documentRouter.patch('/:id', documentAccess({ minRole: 'editor' }), async (req, 
 
 documentRouter.delete('/:id', documentAccess({ minRole: 'owner' }), async (_req, res) => {
 	await collections.documents.deleteOne({ _id: res.locals.documentId });
+	await accessNotifier.documentDeleted(res.locals.documentId);
 
 	res.status(204).end();
 });
