@@ -1,6 +1,6 @@
 # E2E: dois navegadores no mesmo documento
 
-> **Estado: planejado.** Segunda metade da semana 6 (a primeira é o Redis, `docs/redis.md`).
+> **Estado: implementado** na branch `feat/e2e`, um commit por passo da seção "Passos e commits", mais um de estabilidade (ver abaixo). O que mudou na prática em relação ao plano está em "Diferenças do plano", no fim. Segunda metade da semana 6 (a primeira é o Redis, `docs/redis.md`).
 
 Hoje o server tem testes (Vitest + Supertest + clientes de socket) e o web não tem nenhum. Tudo o que depende de um navegador de verdade foi validado à mão, com um script descartável do Playwright fora do repositório: o editor convergindo, o cursor dos outros, os avatares, a reconexão. E foi no navegador que apareceram os bugs que os testes do server não pegariam (o `volatile` descartado no mesmo tick, o loop do `y-tiptap`, o cursor passando na frente do texto; ver `docs/presence.md` e `docs/realtime.md`).
 
@@ -139,3 +139,37 @@ Ordem pensada para cada passo deixar o repositório verde e útil sozinho; os pa
 - Derrubar e reiniciar um server no meio do teste. A queda do server e a do Redis já têm testes de integração (`socket-server.test.ts`, `multi-instance.test.ts`); com o Playwright exigiria um controlador de processos próprio, e só valeria a pena se aparecer um bug que o teste de integração não pegou.
 - Rodar contra o deploy real (Fly + Vercel). A confirmação de que `/api/socket.io` aceita o upgrade de WebSocket em produção continua sendo manual, no próximo deploy (`docs/todos.md`).
 - Incluir o E2E como etapa obrigatória do `cd.yml` (ver "CI").
+
+## Diferenças do plano
+
+**Números.** 17 testes distintos, que rodam 26 vezes: 15 no projeto `one-instance` e 11 no `two-instances` (`smoke`, `auth` e `sharing` não dependem da topologia e rodam só no primeiro; `multi-instance` só no segundo). A suíte inteira leva cerca de 28s numa máquina de 10 núcleos.
+
+**O que foi diferente do que estava escrito**
+
+- **Portas próprias: 4333/4334 (servers) e 6173/6174 (webs).** O plano usava as do `pnpm dev` e deixava a troca como decisão do passo 3. Na hora de começar já havia um server e um Vite do dev nas portas 3333 e 5174; mudar evita o choque e o risco de o E2E falar com o server de desenvolvimento. Está tudo em `src/env.ts`.
+- **O banco é apagado por um script, não pelo `globalSetup`.** O Playwright sobe os `webServer` antes do `globalSetup`, então os servers já teriam criado o índice quando o banco fosse apagado. `pnpm test` (do pacote) roda `tsx src/drop-database.ts` e só então o Playwright. Rodar `playwright test` direto pula a limpeza, sem prejuízo: cada teste cria usuários com e-mail único.
+- **Um Chromium novo instalou normalmente nesta máquina** (o `playwright install chromium` baixou o headless shell). O risco do plano, de ter que fixar o Playwright na versão do cache, não se concretizou.
+- **O health do server é `/health`, não `/api/health`** (a rota não passa pelo prefixo `/api` do proxy). O teste de fumaça confere o `/health` direto nas duas instâncias e o proxy por `/api/auth/get-session`.
+- **Os textos da tela eram outros.** O papel aparece como "Can edit" e "View only" (não "Editor" e "Viewer"), o selo da lista é "Shared · Can edit", o botão de entrar é "Login", o de criar é "New" (e existe também "New document", daí o `exact`), e "Document not found" é um texto, não um `heading`.
+- **O cenário 14 saiu.** "Papel e remoção atravessam instâncias" já é o que os cenários 6 e 7 fazem no projeto `two-instances`, com o Bob na instância B. Repetir seria o mesmo teste duas vezes.
+- **O cenário 12 (offline) não usa `context.setOffline()` sozinho**, como o plano já desconfiava: o Chromium só bloqueia conexões novas e deixa o WebSocket aberto (o status continuava "Saved"). A página guarda os seus sockets do documento (`addInitScript`, em `src/network.ts`), e `goOffline` os **fecha e depois** corta a rede. Duas coisas que não funcionaram, para ninguém tentar de novo: `page.routeWebSocket` aceitando e fechando as tentativas de reconexão (o cliente do Socket.IO fica esperando um handshake que nunca vem e **deixa de reconectar**; o servidor inalcançável de verdade dá erro de conexão, que ele trata) e cortar a rede antes de fechar (o fechamento de um WebSocket depende de uma troca de frames com o server, e o evento `close` atrasa).
+- **O cenário 13 refaz o cenário quando a pré-condição não vale.** O teste só prova o `room:state` se o texto ainda não estiver no Mongo (a gravação sai 2s depois da última edição). Numa máquina carregada a digitação passava de 2s; o teste agora usa `insertText` (um evento só) e, se a versão salva já não for 0, recomeça com outro documento (`toPass`). Conferido como mutação: com `E2E_REDIS_URL` vazio (servers sem Redis), os dois cenários de `multi-instance.spec.ts` falham porque o Bob recebe o documento vazio.
+- **O cenário 10 é uma guarda parcial.** Medido com o `updatesInFlight` do server desligado de propósito (a presença passando na frente do texto): o teste pegou o cursor sumindo em 2 de 4 execuções. Ele amostra a cada frame e exige zero quadros sem cursor, então um falso verde existe; a cobertura firme dessa regressão continua sendo o teste do server (`relays the presence after the document update`).
+- **Entrou um commit que o plano não tinha:** `test(e2e): Made the offline and the two-instance specs steady under load`, depois do passo 9. A instabilidade do cenário 12 e do 13 só apareceu ao rodar a suíte inteira em carga (8 workers), não rodando cada spec sozinho.
+- **O workflow de CI não foi executado no GitHub.** Foi conferido o YAML, `pnpm install --frozen-lockfile` e `CI=true pnpm e2e` localmente (retries, reporter `github`/`html`); o que só aparece no runner (`playwright install --with-deps`, o cache do navegador, o compose com `--wait`) fica para a primeira execução real do PR.
+
+**O que a investigação mostrou sobre o app**
+
+Nenhum bug do app foi confirmado. Os três pontos abaixo apareceram só com a suíte rodando em carga pesada (6 a 8 workers) e valem como observação:
+
+- **Cursor remoto "uma tecla atrás" quando as setas chegam em milissegundos.** Em ~2,5% das execuções do cenário 9 sob 6 workers, o cursor do Bob na tela da Alice ficava uma ou mais posições atrás, para sempre (a espera chegou a 30s). A causa está do lado do Bob, não na entrega: nesses casos o cursor na `Awareness` dele **e** a cópia da Alice eram iguais (`same=true`), as teclas chegavam ao navegador (cinco `keydown` de `ArrowRight`, nenhum cancelado) e, ainda assim, o cursor nativo só se movia uma vez. Em outra variação, o DOM do Bob já estava na posição certa mas o estado do ProseMirror (e, portanto, a presença) um passo atrás, sem nenhum evento novo para republicar. É a corrida conhecida do ProseMirror entre a seleção nativa e a que ele reaplica quando outra transação chega no meio; não foi investigada a fundo (envolve o `@tiptap/y-tiptap` 3.3.1). Uma pessoa não aperta cinco setas em 15ms, então o impacto real é baixo e o próximo movimento corrige. No teste, `placeCursor` espera cada tecla pousar e `moveCursorAndExpectSeen` refaz o movimento até a outra tela mostrá-lo. Se um dia aparecer reclamação de cursor parado, é por aqui.
+- **`ECONNRESET` no log do Vite** (`ws proxy error`) quando o server derruba os sockets de propósito (mudança de papel, remoção) ou o contexto fecha. É ruído do proxy de desenvolvimento, não falha.
+- **O "Saved" do indicador não quer dizer "gravado no Mongo"**, só que o server recebeu a atualização (`unacked` vazio). A gravação sai depois do debounce. O cenário 11 espera `contentVersion > 0` no Mongo antes de recarregar, para provar a persistência de verdade.
+
+**Estabilidade medida.** Com as correções, 4 execuções seguidas da suíte inteira com `--repeat-each=6 --workers=8` (156 testes cada, 624 no total) passaram sem falha; antes das correções quase todas as execuções tinham 1 ou 2 falhas. Sem carga (workers padrão), as últimas execuções passaram todas.
+
+## Pendente
+
+- Rodar o workflow `e2e.yml` num PR de verdade e acertar o que só o runner mostra.
+- Decidir, depois de umas semanas de histórico, se o E2E entra como etapa obrigatória do `cd.yml`.
+- Opcional: investigar o cursor remoto atrasado (acima) com o `y-tiptap`, se um dia incomodar.

@@ -100,19 +100,19 @@ POST   /api/documents/:id/versions/:versionId/restore   # V2
 | 3 | Editor com Tiptap e autosave via REST | feito (já com Yjs, ver `document-persistence.md`) |
 | 4 | Tempo real com Socket.IO + Yjs, persistência com debounce | feito (`docs/realtime.md`) |
 | 5 | Presença (cursores), compartilhamento e permissões | feito (`docs/sharing.md`, `docs/presence.md`) |
-| 6 | Redis adapter, testes de integração e E2E com dois navegadores | Redis feito (`docs/redis.md`); E2E a fazer |
+| 6 | Redis adapter, testes de integração e E2E com dois navegadores | feito (`docs/redis.md`, `docs/e2e.md`) |
 | 7 | Histórico de versões e busca | a fazer |
 | 8 | Deploy, README caprichado, GIF de demo, polimento | deploy feito; o resto a fazer |
 
 ### Próximo passo
 
-O Redis está pronto (`docs/redis.md`): opcional, só entra com `REDIS_URL`, e as salas das instâncias se mantêm em dia. Falta a outra metade da semana 6: o E2E com dois navegadores, já planejado em `docs/e2e.md`. Ele é também onde a presença ganha teste automático (o web ainda não tem nenhum) e onde duas instâncias do server são exercitadas com navegadores de verdade, o que ainda não foi feito. Pendente com você: confirmar no próximo deploy que `/api/socket.io` aceita o upgrade de WebSocket, e decidir se o Redis vai para o Fly (ver "Onde hospedar o Redis" em `docs/redis.md`).
+A semana 6 está pronta: o Redis (`docs/redis.md`) e o E2E com dois navegadores (`docs/e2e.md`, 17 testes em duas topologias: as duas pessoas na mesma instância e cada uma numa). Falta rodar o workflow `e2e.yml` num PR de verdade. Pendente com você: confirmar no próximo deploy que `/api/socket.io` aceita o upgrade de WebSocket, e decidir se o Redis vai para o Fly (ver "Onde hospedar o Redis" em `docs/redis.md`). A próxima entrega é a semana 7: histórico de versões e busca.
 
 ## O que destacar no README
 
 - GIF com duas janelas editando o mesmo documento ao mesmo tempo
 - Diagrama da arquitetura de sincronização
 - Por que CRDT em vez de "último a salvar vence"
-- Teste E2E que simula dois usuários editando em paralelo
+- Teste E2E que simula dois usuários editando em paralelo (`apps/e2e`, `docs/e2e.md`)
 - Como o sistema escala com várias instâncias (Redis adapter)
 - Decisões e trade-offs (Mongo para o documento, debounce de persistência)

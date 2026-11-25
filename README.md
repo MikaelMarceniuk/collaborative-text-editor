@@ -35,7 +35,7 @@ A Notion-style document editor built on **Yjs CRDTs**, designed from day one for
 | **Collaboration**   | Yjs (CRDT), Socket.IO                                                                                   |
 | **Auth**            | Better Auth (email + password, email verification, anonymous guests), Resend                            |
 | **Database**        | MongoDB (native driver)                                                                                 |
-| **Testing**         | Vitest, Supertest                                                                                       |
+| **Testing**         | Vitest, Supertest, Playwright (E2E with two browsers)                                                   |
 | **Tooling & infra** | pnpm workspaces, Oxlint, Oxfmt, Docker, GitHub Actions, Fly.io, Vercel                                  |
 
 ## How real-time sync works
@@ -104,12 +104,15 @@ apps/
 │       ├── realtime/    # Socket.IO: auth, document rooms, debounced saves, rooms across instances
 │       ├── services/    # Yjs merge, guest document transfer
 │       └── jobs/        # abandoned guest cleanup
-└── web/             # React SPA
-    └── src/
-        ├── components/  # UI, editor (Tiptap), forms
-        ├── hooks/       # TanStack Query hooks
-        ├── lib/         # API client, document socket (sync)
-        └── pages/       # routes
+├── web/             # React SPA
+│   └── src/
+│       ├── components/  # UI, editor (Tiptap), forms
+│       ├── hooks/       # TanStack Query hooks
+│       ├── lib/         # API client, document socket (sync)
+│       └── pages/       # routes
+└── e2e/             # Playwright: two browsers, one and two server instances
+    ├── src/         # helpers: accounts, documents, editor, socket switch
+    └── tests/       # specs
 ```
 
 ## Running locally
@@ -142,6 +145,15 @@ pnpm --filter @collaborative-text-editor/server test
 
 The server tests run against the local MongoDB, in a separate `collaborative-editor-test` database (override it with `TEST_MONGO_URL`). The tests that run two server instances need Redis and are skipped unless `TEST_REDIS_URL` is set (`docker compose -f compose-dev.yml --profile redis up -d --wait`, then `TEST_REDIS_URL=redis://localhost:6379`). CI always runs them.
 
+#### E2E
+
+```bash
+pnpm --filter @collaborative-text-editor/e2e exec playwright install chromium   # once
+pnpm e2e                                                                        # starts MongoDB and Redis, then runs the suite
+```
+
+Playwright starts four processes of its own: two API instances (ports 4333 and 4334, both on the same Redis) and two Vite dev servers (6173 and 6174), each proxying to its own instance. It uses a separate `collaborative-editor-e2e` database, emptied at the start of each `pnpm e2e`, so it does not touch your development data or the `pnpm dev` ports. Most specs run twice: with both people on the same instance and with the second person on the other one, so everything that works on one instance is also checked across two. Use `pnpm --filter @collaborative-text-editor/e2e test:ui` to watch the browsers.
+
 ## Roadmap
 
 - [x] Auth with email verification and guest mode
@@ -154,7 +166,7 @@ The server tests run against the local MongoDB, in a separate `collaborative-edi
 - [x] Share documents by email with roles
 - [x] One-command local setup with Docker Compose
 - [x] Several server instances through an optional Redis
-- [ ] E2E tests (two browsers editing the same document)
+- [x] E2E tests (two browsers editing the same document, on one and on two server instances)
 - [ ] Version history with snapshots
 
 ## Author
