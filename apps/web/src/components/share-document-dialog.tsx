@@ -1,12 +1,15 @@
-import { IconAlertTriangle, IconRefresh } from '@tabler/icons-react';
+import { IconAlertTriangle, IconDoorExit, IconRefresh } from '@tabler/icons-react';
+import { useState } from 'react';
 
 import { DocumentMemberRow } from '@/components/document-member-row';
 import { InviteMemberForm } from '@/components/invite-member-form';
+import { LeaveDocumentDialog } from '@/components/leave-document-dialog';
 import { Button } from '@/components/ui/button';
 import {
 	Dialog,
 	DialogContent,
 	DialogDescription,
+	DialogFooter,
 	DialogHeader,
 	DialogTitle,
 } from '@/components/ui/dialog';
@@ -44,6 +47,7 @@ export const ShareDocumentDialog = ({ document, open, onOpenChange }: ShareDocum
 		{ enabled: open },
 	);
 
+	const [isLeaveDialogOpen, setIsLeaveDialogOpen] = useState(false);
 	const isOwner = document?.ownerId === user.id;
 
 	const renderMembers = () => {
@@ -80,20 +84,37 @@ export const ShareDocumentDialog = ({ document, open, onOpenChange }: ShareDocum
 	};
 
 	return (
-		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent>
-				<DialogHeader>
-					<DialogTitle>Share document</DialogTitle>
-					<DialogDescription className="truncate">{document?.title}</DialogDescription>
-				</DialogHeader>
+		<>
+			<Dialog open={open} onOpenChange={onOpenChange}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Share document</DialogTitle>
+						<DialogDescription className="truncate">{document?.title}</DialogDescription>
+					</DialogHeader>
 
-				{isOwner && document && <InviteMemberForm documentId={document._id} />}
+					{isOwner && document && <InviteMemberForm documentId={document._id} />}
 
-				<section aria-label="People with access" className="flex flex-col gap-1">
-					<h3 className="text-sm font-medium">People with access</h3>
-					{renderMembers()}
-				</section>
-			</DialogContent>
-		</Dialog>
+					<section aria-label="People with access" className="flex flex-col gap-1">
+						<h3 className="text-sm font-medium">People with access</h3>
+						{renderMembers()}
+					</section>
+
+					{!isOwner && (
+						<DialogFooter>
+							<Button variant="outline" onClick={() => setIsLeaveDialogOpen(true)}>
+								<IconDoorExit />
+								Leave document
+							</Button>
+						</DialogFooter>
+					)}
+				</DialogContent>
+			</Dialog>
+
+			<LeaveDocumentDialog
+				document={document}
+				open={isLeaveDialogOpen}
+				onOpenChange={setIsLeaveDialogOpen}
+			/>
+		</>
 	);
 };
