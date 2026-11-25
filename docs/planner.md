@@ -99,14 +99,14 @@ POST   /api/documents/:id/versions/:versionId/restore   # V2
 | 2 | CRUD de documentos e tela de listagem | feito |
 | 3 | Editor com Tiptap e autosave via REST | feito (já com Yjs, ver `document-persistence.md`) |
 | 4 | Tempo real com Socket.IO + Yjs, persistência com debounce | feito (`docs/realtime.md`) |
-| 5 | Presença (cursores), compartilhamento e permissões | compartilhamento e permissões feitos (`docs/sharing.md`); presença a fazer |
+| 5 | Presença (cursores), compartilhamento e permissões | compartilhamento e permissões feitos (`docs/sharing.md`); presença em andamento (`docs/presence.md`) |
 | 6 | Redis adapter, testes de integração e E2E com dois navegadores | a fazer |
 | 7 | Histórico de versões e busca | a fazer |
 | 8 | Deploy, README caprichado, GIF de demo, polimento | deploy feito; o resto a fazer |
 
 ### Próximo passo
 
-O tempo real está pronto (`docs/realtime.md`). Segue a presença (cursores e seleção com nome e cor, via `y-protocols/awareness` na mesma sala do socket) e, na semana 6, o Redis adapter e os testes E2E com dois navegadores. Antes do Redis adapter, ler "Riscos" em `docs/realtime.md`: as salas em memória de cada instância precisarão receber os updates das outras.
+O tempo real está pronto (`docs/realtime.md`). Segue a presença (`docs/presence.md`: cursores e seleção com nome e cor, via `y-protocols/awareness` na mesma sala do socket) e, na semana 6, o Redis adapter e os testes E2E com dois navegadores. Antes do Redis adapter, ler "Riscos" em `docs/realtime.md`: as salas em memória de cada instância precisarão receber os updates das outras.
 
 ## O que destacar no README
 
