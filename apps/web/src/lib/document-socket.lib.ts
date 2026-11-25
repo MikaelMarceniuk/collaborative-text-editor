@@ -22,11 +22,20 @@ interface DocumentSocketOptions {
 }
 
 type SyncResponse =
-	| { ok: true; role: 'owner' | 'editor' | 'viewer'; update: Uint8Array; stateVector: Uint8Array }
+	| {
+			ok: true;
+			role: 'owner' | 'editor' | 'viewer';
+			update: ArrayBuffer | Uint8Array;
+			stateVector: ArrayBuffer | Uint8Array;
+	  }
 	| { ok: false; error: string };
 type UpdateResponse = { ok: true } | { ok: false; error: 'forbidden' | 'invalid' };
 
 const ACK_TIMEOUT_MS = 10_000;
+
+// Binary data arrives as an ArrayBuffer in the browser (and as a Buffer, which is already a Uint8Array, in Node)
+const toBytes = (data: ArrayBuffer | Uint8Array) =>
+	data instanceof Uint8Array ? data : new Uint8Array(data);
 
 /**
  * Keeps a Y.Doc in sync with the server over a socket (protocol in docs/realtime.md).
@@ -115,44 +124,56 @@ export const createDocumentSocket = ({
 						if (response && !response.ok)
 							console.error('Could not sync the document:', response.error);
 						// Try again from scratch: a new connection runs the sync again
+						if (status !== 'ready') {
+							status = 'error';
+							notify();
+						}
 						socket.disconnect().connect();
 						return;
 					}
 
-					Y.applyUpdate(ydoc, response.update, REMOTE_ORIGIN);
+					try {
+						Y.applyUpdate(ydoc, toBytes(response.update), REMOTE_ORIGIN);
 
-					// Covers the case where the announcement was lost (for example a connection that dropped on its own)
-					if (knownRole !== undefined && knownRole !== response.role && !accessChangeAnnounced) {
-						onAccessChanged?.();
+						// Covers the case where the announcement was lost (for example a connection that dropped on its own)
+						if (knownRole !== undefined && knownRole !== response.role && !accessChangeAnnounced) {
+							onAccessChanged?.();
+						}
+						accessChangeAnnounced = false;
+						knownRole = response.role;
+						canEdit = response.role === 'owner' || response.role === 'editor';
+
+						if (canEdit) {
+							// Everything up to here, including edits made offline, goes in this one update
+							const covered = [...unacked];
+							const diff = Y.encodeStateAsUpdate(ydoc, toBytes(response.stateVector));
+							synced = true;
+							socket
+								.timeout(ACK_TIMEOUT_MS)
+								.emit(
+									'doc:update',
+									diff,
+									(sendError: Error | null, sendResponse?: UpdateResponse) => {
+										if (sendError || !sendResponse?.ok) return;
+										for (const token of covered) unacked.delete(token);
+										notify();
+									},
+								);
+						} else {
+							synced = true;
+							unacked.clear();
+						}
+
+						status = 'ready';
+						online = true;
+						notify();
+					} catch (syncError) {
+						// Without this, a bad response would leave the page on "Loading document…" forever
+						console.error('Could not apply the synced document:', syncError);
+						if (status !== 'ready') status = 'error';
+						notify();
+						socket.disconnect();
 					}
-					accessChangeAnnounced = false;
-					knownRole = response.role;
-					canEdit = response.role === 'owner' || response.role === 'editor';
-
-					if (canEdit) {
-						// Everything up to here, including edits made offline, goes in this one update
-						const covered = [...unacked];
-						const diff = Y.encodeStateAsUpdate(ydoc, response.stateVector);
-						synced = true;
-						socket
-							.timeout(ACK_TIMEOUT_MS)
-							.emit(
-								'doc:update',
-								diff,
-								(sendError: Error | null, sendResponse?: UpdateResponse) => {
-									if (sendError || !sendResponse?.ok) return;
-									for (const token of covered) unacked.delete(token);
-									notify();
-								},
-							);
-					} else {
-						synced = true;
-						unacked.clear();
-					}
-
-					status = 'ready';
-					online = true;
-					notify();
 				},
 			);
 	};
@@ -186,8 +207,8 @@ export const createDocumentSocket = ({
 		notify();
 	});
 
-	socket.on('doc:update', (update: Uint8Array) => {
-		Y.applyUpdate(ydoc, update, REMOTE_ORIGIN);
+	socket.on('doc:update', (update: ArrayBuffer | Uint8Array) => {
+		Y.applyUpdate(ydoc, toBytes(update), REMOTE_ORIGIN);
 	});
 
 	socket.on('doc:access-changed', () => {
