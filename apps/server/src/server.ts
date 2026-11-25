@@ -1,7 +1,10 @@
+import { createServer } from 'node:http';
+
 import { app } from './app.js';
 import { env } from './config/env.js';
 import { connectToMongo, mongoClient } from './config/mongodb.js';
 import { scheduleCleanupAbandonedGuests } from './jobs/cleanup-abandoned-guests.job.js';
+import { createSocketServer } from './realtime/socket-server.js';
 
 try {
 	await connectToMongo();
@@ -12,7 +15,10 @@ try {
 
 const stopCleanupAbandonedGuests = scheduleCleanupAbandonedGuests();
 
-const server = app.listen(env.PORT, () => {
+const httpServer = createServer(app);
+const socketServer = createSocketServer(httpServer);
+
+httpServer.listen(env.PORT, () => {
 	console.log(`Server running on http://localhost:${env.PORT}`);
 });
 
@@ -21,9 +27,8 @@ async function shutdown(signal: NodeJS.Signals) {
 	stopCleanupAbandonedGuests();
 
 	try {
-		await new Promise<void>((resolve, reject) => {
-			server.close((error) => (error ? reject(error) : resolve()));
-		});
+		// Disconnects every socket and closes the HTTP server: server.close() alone would wait for them forever
+		await socketServer.close();
 		await mongoClient.close();
 		process.exit(0);
 	} catch (error) {
