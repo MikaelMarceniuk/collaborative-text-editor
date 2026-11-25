@@ -5,7 +5,10 @@ import type { DocumentModel, DocumentRole } from '../models/document.model.js';
 
 export const newUserId = () => new ObjectId();
 
-export const asUser = (userId: ObjectId) => ({ 'x-test-user-id': userId.toHexString() });
+export const asUser = (userId: ObjectId, { guest = false }: { guest?: boolean } = {}) => ({
+	'x-test-user-id': userId.toHexString(),
+	'x-test-user-guest': String(guest),
+});
 
 interface CreateDocumentOptions {
 	ownerId: ObjectId;

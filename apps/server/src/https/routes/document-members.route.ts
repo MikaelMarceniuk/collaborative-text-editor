@@ -51,6 +51,13 @@ const addMemberSchema = z.object({
 });
 
 documentMembersRouter.post('/', documentAccess({ minRole: 'owner' }), async (req, res) => {
+	// Guests have no email, and their documents are deleted when the guest is abandoned,
+	// which would take the shared document away from everyone else
+	if (res.locals.user.isAnonymous) {
+		res.status(403).json({ error: 'Create an account to share documents' });
+		return;
+	}
+
 	const parsed = addMemberSchema.safeParse(req.body);
 	if (!parsed.success) {
 		res.status(400).json({ error: z.prettifyError(parsed.error) });
@@ -62,6 +69,16 @@ documentMembersRouter.post('/', documentAccess({ minRole: 'owner' }), async (req
 	const invitedUser = await collections.users.findOne({ email });
 	if (!invitedUser) {
 		res.status(404).json({ error: 'No user with this email' });
+		return;
+	}
+
+	if (invitedUser._id.equals(res.locals.user.id)) {
+		res.status(400).json({ error: 'You already own this document' });
+		return;
+	}
+
+	if (invitedUser.isAnonymous) {
+		res.status(400).json({ error: 'Guests cannot be invited' });
 		return;
 	}
 

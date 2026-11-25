@@ -185,6 +185,42 @@ describe('POST /api/documents/:id/members', () => {
 		expect(saved?.members.filter((member) => member.userId.equals(invited.id))).toHaveLength(1);
 	});
 
+	it('responds 403 when the owner is a guest', async () => {
+		const guest = await createUser({ isAnonymous: true });
+		const document = await createDocument({ ownerId: guest.id });
+		const invited = await createUser();
+
+		const response = await request(app)
+			.post(`/api/documents/${document._id}/members`)
+			.set(asUser(guest.id, { guest: true }))
+			.send({ email: invited.email, role: 'viewer' });
+
+		expect(response.status).toBe(403);
+	});
+
+	it('responds 400 when inviting a guest', async () => {
+		const { document, users } = await setup();
+		const guest = await createUser({ isAnonymous: true });
+
+		const response = await invite(document._id, users.owner, {
+			email: guest.email,
+			role: 'viewer',
+		});
+
+		expect(response.status).toBe(400);
+	});
+
+	it('responds 400 when the owner invites themself', async () => {
+		const { document, users } = await setup();
+
+		const response = await invite(document._id, users.owner, {
+			email: users.owner.email,
+			role: 'editor',
+		});
+
+		expect(response.status).toBe(400);
+	});
+
 	it.each([
 		['an invalid email', { email: 'not-an-email', role: 'viewer' }],
 		['a missing role', { email: 'a@test.local' }],
