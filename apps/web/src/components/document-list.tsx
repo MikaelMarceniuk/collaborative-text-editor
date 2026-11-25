@@ -12,6 +12,7 @@ import { type ReactNode, useState } from 'react';
 import { DeleteDocumentDialog } from '@/components/delete-document-dialog';
 import { DocumentItem } from '@/components/document-item';
 import { RenameDocumentDialog } from '@/components/rename-document-dialog';
+import { ShareDocumentDialog } from '@/components/share-document-dialog';
 import { Button } from '@/components/ui/button';
 import { Command, CommandInput, CommandList } from '@/components/ui/command';
 import {
@@ -83,12 +84,19 @@ export const DocumentList = ({ documents, isPending, isError, onRetry }: Documen
 	const [filter, setFilter] = useState<DocumentFilter>('all');
 	const [documentToRename, setDocumentToRename] = useState<DocumentSummary | null>(null);
 	const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
+	const [documentToShare, setDocumentToShare] = useState<DocumentSummary | null>(null);
+	const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
 	const [documentToDelete, setDocumentToDelete] = useState<DocumentSummary | null>(null);
 	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
 	const openRenameDialog = (document: DocumentSummary) => {
 		setDocumentToRename(document);
 		setIsRenameDialogOpen(true);
+	};
+
+	const openShareDialog = (document: DocumentSummary) => {
+		setDocumentToShare(document);
+		setIsShareDialogOpen(true);
 	};
 
 	const openDeleteDialog = (document: DocumentSummary) => {
@@ -180,6 +188,7 @@ export const DocumentList = ({ documents, isPending, isError, onRetry }: Documen
 							key={document._id}
 							document={document}
 							onRename={openRenameDialog}
+							onShare={openShareDialog}
 							onDelete={openDeleteDialog}
 						/>
 					))}
@@ -236,6 +245,12 @@ export const DocumentList = ({ documents, isPending, isError, onRetry }: Documen
 				document={documentToRename}
 				open={isRenameDialogOpen}
 				onOpenChange={setIsRenameDialogOpen}
+			/>
+
+			<ShareDocumentDialog
+				document={documentToShare}
+				open={isShareDialogOpen}
+				onOpenChange={setIsShareDialogOpen}
 			/>
 
 			<DeleteDocumentDialog

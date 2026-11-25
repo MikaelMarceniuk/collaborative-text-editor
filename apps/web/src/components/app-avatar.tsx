@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router';
 
 import { useAuthenticatedSession } from '@/hooks/use-session.hook';
 import { useSignOut } from '@/hooks/use-sign-out.hook';
+import { getInitials } from '@/lib/user.lib';
 
 import { GuestSignOutDialog } from './guest-sign-out-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -16,14 +17,6 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-
-const getInitials = (name: string) =>
-	name
-		.split(' ')
-		.filter(Boolean)
-		.slice(0, 2)
-		.map((part) => part[0]!.toUpperCase())
-		.join('');
 
 export const AppAvatar = () => {
 	const { user } = useAuthenticatedSession();
