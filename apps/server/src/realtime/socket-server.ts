@@ -41,7 +41,26 @@ export const createSocketServer = (httpServer: HttpServer, { redis }: SocketServ
 	// Only the Redis adapter carries messages between instances (serverSideEmit)
 	const peers = redis ? createRoomPeers(io, redis) : noopRoomPeers;
 	const rooms = createDocumentRooms({ peers });
-	peers.listen(rooms);
+
+	// Updates published while Redis was gone never arrived. The room asks the others what it missed, and its
+	// clients, who missed the same updates, are disconnected from this instance so they sync again with the room
+	const catchUp = async () => {
+		for (const documentId of await rooms.resync()) {
+			io.local.in(documentRoomName(documentId)).disconnectSockets(true);
+		}
+	};
+	const stopWatchingRedis = redis?.onReconnect(() => {
+		catchUp().catch(() => undefined);
+		// The others may have come back before this instance did, and found nothing to ask it
+		peers.announceReturn();
+	});
+
+	peers.listen({
+		applyRemoteUpdate: rooms.applyRemoteUpdate,
+		stateOf: rooms.stateOf,
+		drop: rooms.drop,
+		catchUp,
+	});
 
 	io.use(authenticateSocket);
 	io.on('connection', (socket) => registerDocumentSocket(rooms, socket));
@@ -76,6 +95,7 @@ export const createSocketServer = (httpServer: HttpServer, { redis }: SocketServ
 		// Disconnects the sockets and closes the HTTP server (so it replaces httpServer.close()),
 		// then saves what the rooms still hold. Nothing can arrive after the sockets are gone
 		close: async () => {
+			stopWatchingRedis?.();
 			resetAccessNotifier();
 			await io.close();
 			await rooms.flushAll();

@@ -248,6 +248,7 @@ describe('rooms across instances', () => {
 		publishUpdate: vi.fn(),
 		requestState: vi.fn(async () => []),
 		dropEverywhere: vi.fn(async () => {}),
+		announceReturn: vi.fn(),
 		listen: vi.fn(),
 		...overrides,
 	});
@@ -371,5 +372,93 @@ describe('rooms across instances', () => {
 		await rooms.applyUpdate(documentId, textUpdate('mine'));
 
 		expect(readText((await rooms.stateOf(documentId))!)).toBe('mine');
+	});
+});
+
+describe('catching up rooms after Redis was gone', () => {
+	const peersAnswering = (requestState: RoomPeers['requestState']): RoomPeers => ({
+		publishUpdate: vi.fn(),
+		requestState,
+		dropEverywhere: vi.fn(async () => {}),
+		announceReturn: vi.fn(),
+		listen: vi.fn(),
+	});
+
+	it('applies what the other instances have, and says which documents learned something', async () => {
+		const { documentId } = await setup();
+		const missed = new Y.Doc();
+		missed.getText('t').insert(0, 'sent while Redis was gone');
+		const answers: Uint8Array[][] = [[], [Y.encodeStateAsUpdate(missed)]];
+		const rooms = createDocumentRooms({ peers: peersAnswering(async () => answers.shift()!) });
+		await rooms.join(documentId);
+
+		expect(await rooms.resync()).toEqual([documentId]);
+
+		const { update } = await rooms.sync(documentId, Y.encodeStateVector(new Y.Doc()));
+		expect(readText(update)).toBe('sent while Redis was gone');
+	});
+
+	it('says nothing about a room that already had everything', async () => {
+		const { documentId } = await setup();
+		const known = textUpdate('known');
+		// The other instances hold the same state the room started from
+		const rooms = createDocumentRooms({ peers: peersAnswering(async () => [known]) });
+		await rooms.join(documentId);
+
+		expect(await rooms.resync()).toEqual([]);
+	});
+
+	it('notices a deletion made elsewhere, which does not change the state vector', async () => {
+		const { documentId } = await setup();
+		const first = new Y.Doc();
+		first.getText('t').insert(0, 'hello');
+		const written = Y.encodeStateAsUpdate(first);
+		const answers: Uint8Array[][] = [[], []];
+		const rooms = createDocumentRooms({ peers: peersAnswering(async () => answers.shift()!) });
+		await rooms.join(documentId);
+		await rooms.applyUpdate(documentId, written);
+
+		// Another instance deleted the text
+		const other = new Y.Doc();
+		Y.applyUpdate(other, written);
+		other.getText('t').delete(0, 5);
+		answers.length = 0;
+		answers.push([Y.encodeStateAsUpdate(other)]);
+
+		expect(await rooms.resync()).toEqual([documentId]);
+		const { update } = await rooms.sync(documentId, Y.encodeStateVector(new Y.Doc()));
+		expect(readText(update)).toBe('');
+	});
+
+	it('skips a room whose request fails and still catches up the others', async () => {
+		const [first, second] = [await setup(), await setup()];
+		const missed = new Y.Doc();
+		missed.getText('t').insert(0, 'missed');
+		let afterOutage = false;
+		const requestState = vi.fn<RoomPeers['requestState']>(async (documentId) => {
+			if (!afterOutage) return [];
+			if (documentId.equals(first.documentId)) throw new Error('no answer');
+			return [Y.encodeStateAsUpdate(missed)];
+		});
+		const rooms = createDocumentRooms({ peers: peersAnswering(requestState) });
+		await rooms.join(first.documentId);
+		await rooms.join(second.documentId);
+		afterOutage = true;
+		const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		expect(await rooms.resync()).toEqual([second.documentId]);
+
+		errors.mockRestore();
+	});
+
+	it('does not ask about a room that is still loading', async () => {
+		const { documentId } = await setup();
+		const requestState = vi.fn(() => new Promise<Uint8Array[]>(() => {}));
+		const rooms = createDocumentRooms({ peers: peersAnswering(requestState) });
+		void rooms.join(documentId).catch(() => undefined);
+		requestState.mockClear();
+
+		expect(await rooms.resync()).toEqual([]);
+		expect(requestState).not.toHaveBeenCalled();
 	});
 });

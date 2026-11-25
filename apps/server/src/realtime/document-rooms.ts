@@ -263,6 +263,43 @@ export const createDocumentRooms = ({
 			loaded.delete(key);
 		},
 
+		/**
+		 * Asks the other instances for the state of every room that is open and applies it. Used when Redis comes back
+		 * after being gone: the updates sent meanwhile were lost, so the rooms (and the clients in them) may be behind.
+		 * Returns the documents whose room learned something, so their sockets can be sent to sync again.
+		 * A room that cannot be answered now is skipped.
+		 */
+		resync: async () => {
+			const changed: ObjectId[] = [];
+
+			await Promise.all(
+				[...loaded.values()].map(async (room) => {
+					try {
+						const states = await peers.requestState(room.documentId);
+
+						// "update" fires only when applying changed something, deletions included
+						let learned = false;
+						const onUpdate = () => {
+							learned = true;
+						};
+						room.ydoc.on('update', onUpdate);
+						try {
+							for (const state of states) Y.applyUpdate(room.ydoc, state);
+						} finally {
+							room.ydoc.off('update', onUpdate);
+						}
+
+						if (learned) changed.push(room.documentId);
+					} catch (error) {
+						// TODO Improve with logs
+						console.error('Could not catch up the room with the other instances:', error);
+					}
+				}),
+			);
+
+			return changed;
+		},
+
 		/** Number of active rooms, for tests. */
 		size: () => rooms.size,
 	};
