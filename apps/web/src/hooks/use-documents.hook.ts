@@ -27,6 +27,8 @@ export const documentsQueryKeys = {
 	detail: (userId: string, documentId: string) => ['documents', userId, documentId] as const,
 	content: (userId: string, documentId: string) =>
 		['documents', userId, documentId, 'content'] as const,
+	members: (userId: string, documentId: string) =>
+		['documents', userId, documentId, 'members'] as const,
 };
 
 export const DOCUMENT_TITLE_MAX_LENGTH = 200;
