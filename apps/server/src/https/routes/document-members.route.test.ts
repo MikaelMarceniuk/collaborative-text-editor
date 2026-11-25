@@ -1,13 +1,21 @@
 import type { ObjectId } from 'mongodb';
 import request from 'supertest';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 
 import { app } from '../../app.js';
 import { collections } from '../../config/mongodb.js';
+import { sendShareDocumentEmail } from '../../emails/share-document.js';
 import { asUser, createDocument, createUser, newUserId } from '../../test/helpers.js';
 
 vi.mock('../middleware/auth.middleware.js', () => import('../../test/mock-auth.js'));
+vi.mock('../../emails/share-document.js', () => ({
+	sendShareDocumentEmail: vi.fn().mockResolvedValue(undefined),
+}));
+
+beforeEach(() => {
+	vi.mocked(sendShareDocumentEmail).mockClear();
+});
 
 // A document with an owner, an editor and a viewer, plus a user outside it
 const setup = async () => {
@@ -121,6 +129,45 @@ describe('POST /api/documents/:id/members', () => {
 
 		const saved = await collections.documents.findOne({ _id: document._id });
 		expect(saved?.members).toContainEqual({ userId: invited.id, role: 'editor' });
+	});
+
+	it('emails the invited user with the document link', async () => {
+		const { document, users } = await setup();
+		const invited = await createUser({ name: 'Newcomer' });
+
+		await invite(document._id, users.owner, { email: invited.email, role: 'editor' });
+
+		expect(sendShareDocumentEmail).toHaveBeenCalledExactlyOnceWith({
+			to: invited.email,
+			name: 'Newcomer',
+			inviterName: 'Test user',
+			documentTitle: 'Test document',
+			documentUrl: `http://localhost:5173/${document._id}`,
+			role: 'editor',
+		});
+	});
+
+	it('still adds the member when the email fails to send', async () => {
+		const { document, users } = await setup();
+		const invited = await createUser();
+		vi.mocked(sendShareDocumentEmail).mockRejectedValueOnce(new Error('mail down'));
+		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		const response = await invite(document._id, users.owner, {
+			email: invited.email,
+			role: 'viewer',
+		});
+
+		expect(response.status).toBe(201);
+		consoleError.mockRestore();
+	});
+
+	it('does not email when the invite is rejected', async () => {
+		const { document, users } = await setup();
+
+		await invite(document._id, users.owner, { email: users.editor.email, role: 'viewer' });
+
+		expect(sendShareDocumentEmail).not.toHaveBeenCalled();
 	});
 
 	it('makes the document show up in the invited user list', async () => {

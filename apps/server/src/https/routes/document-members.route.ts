@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { ObjectId } from 'mongodb';
 import { z } from 'zod';
 
+import { env } from '../../config/env.js';
 import { collections } from '../../config/mongodb.js';
+import { sendShareDocumentEmail } from '../../emails/share-document.js';
 import type { DocumentRole } from '../../models/document.model.js';
 import { documentAccess } from '../middleware/document-access.middleware.js';
 
@@ -94,6 +96,24 @@ documentMembersRouter.post('/', documentAccess({ minRole: 'owner' }), async (req
 		res.status(409).json({ error: 'This user already has access to the document' });
 		return;
 	}
+
+	const document = await collections.documents.findOne(
+		{ _id: res.locals.documentId },
+		{ projection: { title: 1 } },
+	);
+
+	// Not awaited: the invite is already saved, so a mail failure must not fail the request
+	void sendShareDocumentEmail({
+		to: invitedUser.email,
+		name: invitedUser.name,
+		inviterName: res.locals.user.name,
+		documentTitle: document?.title ?? 'Untitled document',
+		documentUrl: `${env.WEB_URL}/${res.locals.documentId}`,
+		role,
+	}).catch((error) => {
+		// TODO Improve with logs
+		console.error('Failed to send share email:', error);
+	});
 
 	res.status(201).json({
 		member: {
