@@ -63,8 +63,8 @@ Comment {
 
 ## Arquitetura do tempo real
 
-1. Cliente abre o documento e entra numa sala do Socket.IO (`doc:<id>`), autenticada pela sessão do Better Auth (cookie).
-2. O servidor valida a permissão e envia o estado atual do Yjs.
+1. Cliente abre o documento e conecta um socket (`/api/socket.io`) com o id do documento. O handshake é autenticado pela sessão do Better Auth (cookie) e valida a participação; entra na sala `doc:<id>`.
+2. O cliente e o servidor trocam *state vectors* (`doc:sync`) e cada um manda o que falta ao outro. É o mesmo passo na primeira conexão e em cada reconexão.
 3. Cada edição gera um update binário do Yjs, enviado ao servidor e retransmitido para a sala.
 4. Updates são acumulados em memória/Redis e persistidos no Mongo com debounce (ex.: a cada 2s ou N updates).
 5. Com o Redis adapter, várias instâncias do servidor compartilham as salas.
@@ -80,8 +80,7 @@ POST   /api/documents
 GET    /api/documents/:id
 PATCH  /api/documents/:id
 DELETE /api/documents/:id
-GET    /api/documents/:id/content   # estado Yjs (octet-stream)
-POST   /api/documents/:id/updates   # update incremental Yjs (octet-stream); sai de cena com o Socket.IO
+# O conteúdo (estado e updates do Yjs) trafega pelo socket em /api/socket.io, ver docs/realtime.md
 
 GET    /api/documents/:id/members            # qualquer membro, com nome e e-mail
 POST   /api/documents/:id/members            # dono convida por e-mail (editor | viewer)
@@ -99,7 +98,7 @@ POST   /api/documents/:id/versions/:versionId/restore   # V2
 | 1 | Setup do monorepo, Docker Compose, CI, auth completa | feito (v0.1.0; Compose só para dev) |
 | 2 | CRUD de documentos e tela de listagem | feito |
 | 3 | Editor com Tiptap e autosave via REST | feito (já com Yjs, ver `document-persistence.md`) |
-| 4 | Tempo real com Socket.IO + Yjs, persistência com debounce | a fazer |
+| 4 | Tempo real com Socket.IO + Yjs, persistência com debounce | feito (`docs/realtime.md`) |
 | 5 | Presença (cursores), compartilhamento e permissões | compartilhamento e permissões feitos (`docs/sharing.md`); presença a fazer |
 | 6 | Redis adapter, testes de integração e E2E com dois navegadores | a fazer |
 | 7 | Histórico de versões e busca | a fazer |
@@ -107,7 +106,7 @@ POST   /api/documents/:id/versions/:versionId/restore   # V2
 
 ### Próximo passo
 
-Compartilhamento e permissões estão prontos (`docs/sharing.md`), então a sala do socket já pode validar o papel do usuário. Segue a semana 4: Socket.IO + Yjs com persistência com debounce. Ao entrar, o `PATCH`/`DELETE` de membros deve derrubar a conexão de quem perdeu acesso (hoje isso só aparece no próximo refetch).
+O tempo real está pronto (`docs/realtime.md`). Segue a presença (cursores e seleção com nome e cor, via `y-protocols/awareness` na mesma sala do socket) e, na semana 6, o Redis adapter e os testes E2E com dois navegadores. Antes do Redis adapter, ler "Riscos" em `docs/realtime.md`: as salas em memória de cada instância precisarão receber os updates das outras.
 
 ## O que destacar no README
 

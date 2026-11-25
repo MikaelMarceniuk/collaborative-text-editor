@@ -1,5 +1,7 @@
 # Persistência do conteúdo do documento (Yjs)
 
+> **Estado: implementado, e o transporte já mudou.** O sync por REST descrito aqui (`GET /content`, `POST /updates`, fila com debounce no cliente) foi substituído pelo socket em `docs/realtime.md`. Continuam valendo o formato no banco (`ydocState` + `contentVersion`), o `applyDocumentUpdate` e a integração do editor com o `Y.Doc`.
+
 Hoje o editor sempre abre o `content.json` de exemplo e nada é salvo. Este plano salva o conteúdo real no Mongo já no formato do Yjs, sincronizando por REST. A ideia é que, quando entrarem o compartilhamento e o Socket.IO, só o transporte mude: o formato no banco, o merge no server e a integração com o editor continuam os mesmos.
 
 ## Decisões
