@@ -15,6 +15,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
 	await collections.documents.deleteMany({});
+	await db.collection('user').deleteMany({});
 });
 
 afterAll(async () => {
