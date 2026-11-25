@@ -47,7 +47,13 @@ export const createDocumentSocket = ({
 		transports: ['websocket'],
 		withCredentials: true,
 		auth: { documentId },
+		// Connected below, one task later (see startTimer)
+		autoConnect: false,
 	});
+
+	// React StrictMode mounts, unmounts and mounts again in the same task in development. Connecting a task later
+	// means the first, discarded mount never opens a connection, which the dev proxy would log as EPIPE
+	const startTimer = setTimeout(() => socket.connect(), 0);
 
 	let status: SyncStatus = 'connecting';
 	let online = false;
@@ -201,6 +207,7 @@ export const createDocumentSocket = ({
 			socket.connect();
 		},
 		destroy: () => {
+			clearTimeout(startTimer);
 			ydoc.off('update', handleLocalUpdate);
 			socket.disconnect();
 		},
