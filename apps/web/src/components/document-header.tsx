@@ -6,8 +6,10 @@ import {
 } from '@tabler/icons-react';
 import { type Ref, useState } from 'react';
 import { Link } from 'react-router';
+import type { Awareness } from 'y-protocols/awareness';
 
 import { AppAvatar } from '@/components/app-avatar';
+import { DocumentPresence } from '@/components/document-presence';
 import { DocumentTitleInput } from '@/components/document-title-input';
 import { SaveStatusIndicator } from '@/components/save-status-indicator';
 import { ShareDocumentDialog } from '@/components/share-document-dialog';
@@ -19,6 +21,7 @@ import type { SaveStatus } from '@/lib/document-socket.lib';
 
 interface DocumentHeaderProps {
 	document: DocumentSummary;
+	awareness: Awareness;
 	saveStatus?: SaveStatus;
 	isViewOnly?: boolean;
 	onTitleDone: () => void;
@@ -29,6 +32,7 @@ interface DocumentHeaderProps {
 
 export const DocumentHeader = ({
 	document,
+	awareness,
 	saveStatus,
 	isViewOnly,
 	onTitleDone,
@@ -57,6 +61,7 @@ export const DocumentHeader = ({
 			</div>
 
 			<div className="flex shrink-0 items-center gap-1">
+				<DocumentPresence awareness={awareness} />
 				{isViewOnly && <ViewOnlyIndicator />}
 				{saveStatus && <SaveStatusIndicator status={saveStatus} />}
 				<Button variant="outline" size="sm" onClick={() => setIsShareDialogOpen(true)}>
