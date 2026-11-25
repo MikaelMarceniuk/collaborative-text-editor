@@ -1,4 +1,4 @@
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 
 import { mongoUrl } from './env.ts';
 
@@ -17,6 +17,21 @@ export async function markEmailVerified(email: string) {
 		if (result.matchedCount !== 1) {
 			throw new Error(`No user with the email ${email} to verify`);
 		}
+	} finally {
+		await client.close();
+	}
+}
+
+/** How many times the document was saved to the database (0 while only the server memory has the text). */
+export async function savedVersionOf(documentId: string) {
+	const client = new MongoClient(mongoUrl);
+	try {
+		const document = await client
+			.db()
+			.collection('documents')
+			.findOne({ _id: new ObjectId(documentId) });
+
+		return (document?.contentVersion as number | undefined) ?? 0;
 	} finally {
 		await client.close();
 	}
