@@ -106,7 +106,7 @@ POST   /api/documents/:id/versions/:versionId/restore   # V2
 
 ### Próximo passo
 
-O Redis está pronto (`docs/redis.md`): opcional, só entra com `REDIS_URL`, e as salas das instâncias se mantêm em dia. Falta a outra metade da semana 6: o E2E com dois navegadores. Ele é também onde a presença ganha teste automático (o web ainda não tem nenhum) e onde duas instâncias do server são exercitadas com navegadores de verdade, o que ainda não foi feito. Pendente com você: confirmar no próximo deploy que `/api/socket.io` aceita o upgrade de WebSocket, e decidir se o Redis vai para o Fly (ver "Onde hospedar o Redis" em `docs/redis.md`).
+O Redis está pronto (`docs/redis.md`): opcional, só entra com `REDIS_URL`, e as salas das instâncias se mantêm em dia. Falta a outra metade da semana 6: o E2E com dois navegadores, já planejado em `docs/e2e.md`. Ele é também onde a presença ganha teste automático (o web ainda não tem nenhum) e onde duas instâncias do server são exercitadas com navegadores de verdade, o que ainda não foi feito. Pendente com você: confirmar no próximo deploy que `/api/socket.io` aceita o upgrade de WebSocket, e decidir se o Redis vai para o Fly (ver "Onde hospedar o Redis" em `docs/redis.md`).
 
 ## O que destacar no README
 
