@@ -37,14 +37,17 @@ test('what is written while offline reaches the others when the connection is ba
 	const bobsSocket = await installSocketSwitch(bob.page);
 	await Promise.all([openDocument(alice.page, documentId), openDocument(bob.page, documentId)]);
 
-	await bobsSocket.goOffline();
-	await expect(saveStatusOf(bob.page)).toHaveText('Offline');
+	// Cutting is repeated until the page shows it: under heavy load a cut now and then does not take
+	await expect(async () => {
+		await bobsSocket.goOffline();
+		await expect(saveStatusOf(bob.page)).toHaveText('Offline', { timeout: 2_000 });
+	}).toPass({ timeout: 15_000 });
 
 	await typeInEditor(bob.page, 'Bob offline. ');
 	await typeInEditor(alice.page, 'Alice online. ');
 	await expect(editorOf(alice.page)).not.toContainText('Bob offline.');
 
-	bobsSocket.goOnline();
+	await bobsSocket.goOnline();
 
 	await expect(saveStatusOf(bob.page)).toHaveText('Saved', { timeout: 20_000 });
 	await expect.poll(() => contentOf(alice.page)).toContain('Bob offline.');

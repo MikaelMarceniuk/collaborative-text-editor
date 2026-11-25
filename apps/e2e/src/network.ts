@@ -1,37 +1,45 @@
-import type { Page, WebSocketRoute } from '@playwright/test';
+import type { Page } from '@playwright/test';
+
+type PageWithSockets = typeof globalThis & { documentSockets: WebSocket[] };
 
 /**
- * A way to cut the document socket of one page and keep it cut. `context.setOffline()` is not enough:
- * the Chromium emulation only blocks new connections and leaves the open WebSocket alone.
+ * A way to cut the document socket of one page and keep it cut until it is turned back on.
  *
- * Install it BEFORE the page opens the document (only the sockets created afterwards are routed).
- * The Vite HMR socket is not touched: only the Socket.IO path is routed.
+ * `context.setOffline()` alone is not enough: the Chromium emulation only blocks new connections and
+ * leaves the open WebSocket alone. So the page keeps track of its document sockets, and going offline
+ * closes them (first) AND blocks the new ones, which then fail the way an unreachable server does (a connection
+ * error, which the Socket.IO client retries). Answering the retries with an open-and-close instead, as
+ * `routeWebSocket` would, leaves the client waiting for a handshake that never comes, and it stops
+ * trying to reconnect.
+ *
+ * Install it BEFORE the page opens the document (the sockets are tracked from then on).
  */
 export async function installSocketSwitch(page: Page) {
-	let online = true;
-	const open = new Set<{ page: WebSocketRoute; server: WebSocketRoute }>();
+	await page.addInitScript(() => {
+		const NativeWebSocket = globalThis.WebSocket;
+		const sockets: WebSocket[] = [];
+		(globalThis as PageWithSockets).documentSockets = sockets;
 
-	await page.routeWebSocket(/\/api\/socket\.io\//, (route) => {
-		// Reconnection attempts made while offline get a closed socket, like an unreachable server
-		if (!online) {
-			void route.close();
-			return;
-		}
-
-		const connection = { page: route, server: route.connectToServer() };
-		open.add(connection);
-		route.onClose(() => open.delete(connection));
+		globalThis.WebSocket = class extends NativeWebSocket {
+			constructor(url: string | URL, protocols?: string | string[]) {
+				super(url, protocols);
+				// Only the document socket: the Vite HMR one is left alone
+				if (String(url).includes('/api/socket.io/')) sockets.push(this);
+			}
+		};
 	});
 
 	return {
 		async goOffline() {
-			online = false;
-			await Promise.all(
-				[...open].flatMap(({ page: route, server }) => [route.close(), server.close()]),
-			);
+			// Close first: a WebSocket only fires "close" after the closing handshake with the server, which
+			// cannot finish once the network is cut. The first reconnection attempt comes at least ~0.5s later
+			await page.evaluate(() => {
+				for (const socket of (globalThis as PageWithSockets).documentSockets) socket.close();
+			});
+			await page.context().setOffline(true);
 		},
-		goOnline() {
-			online = true;
+		async goOnline() {
+			await page.context().setOffline(false);
 		},
 	};
 }
