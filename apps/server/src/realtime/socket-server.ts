@@ -3,6 +3,8 @@ import type { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
 
 import { env } from '../config/env.js';
+import { createDocumentRooms } from './document-rooms.js';
+import { registerDocumentSocket } from './document-socket.js';
 import { authenticateSocket } from './socket-auth.js';
 
 export const SOCKET_PATH = '/api/socket.io';
@@ -19,10 +21,14 @@ export const createSocketServer = (httpServer: HttpServer) => {
 		cors: { origin: env.WEB_URL, credentials: true },
 	});
 
+	const rooms = createDocumentRooms();
+
 	io.use(authenticateSocket);
+	io.on('connection', (socket) => registerDocumentSocket(rooms, socket));
 
 	return {
 		io,
+		rooms,
 		// Also closes the HTTP server, so it replaces httpServer.close()
 		close: () => io.close(),
 	};
