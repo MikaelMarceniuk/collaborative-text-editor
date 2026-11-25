@@ -25,6 +25,14 @@ describe('room peers while Redis is unreachable', () => {
 		expect(io.serverSideEmitWithAck).not.toHaveBeenCalled();
 	});
 
+	it('does not announce its return to anyone', () => {
+		const io = { serverSideEmit: vi.fn() } as unknown as Server;
+
+		createRoomPeers(io, disconnectedRedis).announceReturn();
+
+		expect(io.serverSideEmit).not.toHaveBeenCalled();
+	});
+
 	it('asks nobody and starts the room from what it has', async () => {
 		const io = { serverSideEmitWithAck: vi.fn() } as unknown as Server;
 
@@ -32,5 +40,37 @@ describe('room peers while Redis is unreachable', () => {
 
 		expect(states).toEqual([]);
 		expect(io.serverSideEmitWithAck).not.toHaveBeenCalled();
+	});
+});
+
+describe('room peers announcing a return', () => {
+	const connectedRedis = { pub: { isReady: true } } as unknown as RedisConnection;
+
+	it('tells the others when Redis is ready', () => {
+		const io = { serverSideEmit: vi.fn() } as unknown as Server;
+
+		createRoomPeers(io, connectedRedis).announceReturn();
+
+		expect(io.serverSideEmit).toHaveBeenCalledExactlyOnceWith('room:resync');
+	});
+
+	it('catches its rooms up when another instance says it is back', () => {
+		const handlers = new Map<string, (...args: unknown[]) => void>();
+		const io = {
+			on: vi.fn((event: string, handler: (...args: unknown[]) => void) =>
+				handlers.set(event, handler),
+			),
+		} as unknown as Server;
+		const catchUp = vi.fn(async () => {});
+		createRoomPeers(io, connectedRedis).listen({
+			applyRemoteUpdate: vi.fn(),
+			stateOf: vi.fn(),
+			drop: vi.fn(),
+			catchUp,
+		});
+
+		handlers.get('room:resync')!();
+
+		expect(catchUp).toHaveBeenCalledOnce();
 	});
 });

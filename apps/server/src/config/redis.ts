@@ -8,6 +8,12 @@ import { createClient } from 'redis';
 export interface RedisConnection {
 	pub: ReturnType<typeof createRedisClient>;
 	sub: ReturnType<typeof createRedisClient>;
+	/**
+	 * Calls the listener each time both connections are ready again after Redis was lost. Messages sent while it
+	 * was away are gone, so whoever depends on them has to catch up (docs/redis.md, "Redis fora do ar").
+	 * Returns a function that removes the listener.
+	 */
+	onReconnect: (listener: () => void) => () => void;
 	/** Closes both connections. Safe to call when they are already closed. */
 	close: () => Promise<void>;
 }
@@ -57,6 +63,22 @@ export const connectToRedis = async (
 	const pub = createRedisClient(url, { maxAttempts, retryDelayMs });
 	const sub = createRedisClient(url, { maxAttempts, retryDelayMs });
 
+	const listeners = new Set<() => void>();
+	let connected = false;
+	let lost = false;
+	for (const client of [pub, sub]) {
+		client.on('reconnecting', () => {
+			// Attempts before the first connection are not a loss: nobody had anything to miss yet
+			if (connected) lost = true;
+		});
+		client.on('ready', () => {
+			if (!lost || !pub.isReady || !sub.isReady) return;
+
+			lost = false;
+			for (const listener of listeners) listener();
+		});
+	}
+
 	const close = async () => {
 		await Promise.all(
 			[pub, sub].map(async (client) => {
@@ -72,11 +94,20 @@ export const connectToRedis = async (
 
 	try {
 		await Promise.all([pub.connect(), sub.connect()]);
+		connected = true;
 	} catch (error) {
 		await close();
 		throw error;
 	}
 
 	console.log('Redis connected');
-	return { pub, sub, close };
+	return {
+		pub,
+		sub,
+		onReconnect: (listener) => {
+			listeners.add(listener);
+			return () => listeners.delete(listener);
+		},
+		close,
+	};
 };

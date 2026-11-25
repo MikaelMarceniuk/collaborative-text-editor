@@ -23,6 +23,12 @@ export interface RoomPeers {
 	 * until they have. Rejects when one does not answer in time.
 	 */
 	dropEverywhere: (documentId: ObjectId) => Promise<void>;
+	/**
+	 * Tells the other instances that this one is back after losing Redis, so they catch up with it too. The
+	 * instances come back at different moments: one that returned earlier asked this one for its rooms while it
+	 * was still gone and got nothing.
+	 */
+	announceReturn: () => void;
 	/** Starts answering the other instances, using the rooms of this one. Called once, right after the rooms exist. */
 	listen: (handlers: RoomPeersHandlers) => void;
 }
@@ -35,6 +41,8 @@ export interface RoomPeersHandlers {
 	stateOf: (documentId: ObjectId) => Promise<Uint8Array | null>;
 	/** Drops the room for the document without saving it. */
 	drop: (documentId: ObjectId) => Promise<void>;
+	/** Another instance came back after losing Redis: catch the rooms up with the others. */
+	catchUp: () => Promise<void>;
 }
 
 /** Without Redis there is no one else: updates go nowhere and nobody has anything to add. */
@@ -42,6 +50,7 @@ export const noopRoomPeers: RoomPeers = {
 	publishUpdate: () => {},
 	requestState: async () => [],
 	dropEverywhere: async () => {},
+	announceReturn: () => {},
 	listen: () => {},
 };
 
@@ -98,7 +107,17 @@ export const createRoomPeers = (io: Server, redis: RedisConnection): RoomPeers =
 		await askPeers(io, 'room:drop', documentId);
 	},
 
-	listen: ({ applyRemoteUpdate, stateOf, drop }) => {
+	announceReturn: () => {
+		if (!redis.pub.isReady) return;
+
+		io.serverSideEmit('room:resync');
+	},
+
+	listen: ({ applyRemoteUpdate, stateOf, drop, catchUp }) => {
+		io.on('room:resync', () => {
+			catchUp().catch(() => undefined);
+		});
+
 		io.on('room:update', (id: unknown, update: unknown) => {
 			const documentId = toObjectId(id);
 			if (!documentId || typeof update !== 'string') return;

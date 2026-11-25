@@ -2,6 +2,7 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import type { ObjectId } from 'mongodb';
+import { createClient } from 'redis';
 import { io as connect, type Socket } from 'socket.io-client';
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -270,5 +271,70 @@ describe.skipIf(!testRedisUrl)('access changes across instances', () => {
 		expect(save).not.toHaveBeenCalled();
 		expect(instanceWithSocket.socketServer.rooms.size()).toBe(0);
 		save.mockRestore();
+	});
+});
+
+describe.skipIf(!testRedisUrl)('rooms catching up after Redis was gone', () => {
+	it('sends the clients to sync again when their room learned what it missed', async () => {
+		const { document, instanceA, instanceB, socketA, socketB } = await setupTwoInstances();
+		// Each room gets an update of its own while the messages between the instances are lost, as if Redis
+		// had been away. The update is real (pending, saved by the instance that received it)
+		const lostA = vi.spyOn(instanceA.socketServer.io, 'serverSideEmit').mockReturnValue(true);
+		const lostB = vi.spyOn(instanceB.socketServer.io, 'serverSideEmit').mockReturnValue(true);
+		await instanceA.socketServer.rooms.applyUpdate(document._id, textUpdate('A'));
+		await instanceB.socketServer.rooms.applyUpdate(document._id, textUpdate('B'));
+		lostA.mockRestore();
+		lostB.mockRestore();
+		const disconnected = [socketA, socketB].map(
+			(socket) => new Promise<string>((resolve) => socket.once('disconnect', resolve)),
+		);
+		const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		// Redis closes every connection, like a restart would
+		const admin = createClient({ url: testRedisUrl });
+		await admin.connect();
+		await admin.sendCommand(['CLIENT', 'KILL', 'TYPE', 'normal']);
+		await admin.sendCommand(['CLIENT', 'KILL', 'TYPE', 'pubsub']);
+		await admin.close();
+
+		expect(await Promise.all(disconnected)).toEqual([
+			'io server disconnect',
+			'io server disconnect',
+		]);
+		errors.mockRestore();
+
+		// They come back and get what the rooms learned from each other
+		const user = await createUser();
+		await collections.documents.updateOne(
+			{ _id: document._id },
+			{ $push: { members: { userId: user.id, role: 'viewer' } } },
+		);
+		const fresh = await openDocument(instanceA, document._id, user.id);
+		const response = await fresh.emitWithAck('doc:sync', emptyStateVector());
+		const text = readText(response.update);
+		expect(text).toContain('A');
+		expect(text).toContain('B');
+	});
+
+	it('leaves the clients alone when their room had everything', async () => {
+		const { socketA, socketB } = await setupTwoInstances();
+		const disconnects = vi.fn();
+		socketA.on('disconnect', disconnects);
+		socketB.on('disconnect', disconnects);
+		const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		const admin = createClient({ url: testRedisUrl });
+		await admin.connect();
+		await admin.sendCommand(['CLIENT', 'KILL', 'TYPE', 'normal']);
+		await admin.sendCommand(['CLIENT', 'KILL', 'TYPE', 'pubsub']);
+		await admin.close();
+		await new Promise((resolve) => setTimeout(resolve, 500));
+
+		expect(disconnects).not.toHaveBeenCalled();
+		// And the instances talk again: an update still crosses
+		const received = nextEvent<Uint8Array>(socketB, 'doc:update');
+		await socketA.emitWithAck('doc:update', textUpdate('still works'));
+		expect(readText(await received)).toBe('still works');
+		errors.mockRestore();
 	});
 });
