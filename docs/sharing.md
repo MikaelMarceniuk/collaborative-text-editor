@@ -1,5 +1,7 @@
 # Compartilhamento e permissões
 
+> **Estado: implementado** na branch `feat/document-sharing`, um commit por passo da seção "Passos e commits". O que mudou na prática em relação ao plano está em "Diferenças do plano", no fim.
+
 Hoje todo documento tem um único membro, o dono. Este plano deixa o dono convidar outros usuários por e-mail, com papel de **editor** ou **leitor**, e fecha as pontas soltas de permissão no server e no front. Vem antes do Socket.IO porque a sala do socket valida o papel do usuário no join e em cada update (ver `document-persistence.md`, "Transição para Share + Socket.IO").
 
 ## O que já existe
@@ -194,3 +196,13 @@ Cada passo é um commit pequeno, termina com algo que dá para conferir e deixa 
     Marcar o todo do membro duplicado (com a nota da invariante dos guests), atualizar `planner.md` (rotas de membros e semana 5) e corrigir o que este plano errou na prática.
 
 Os passos de teste (1, 2, 13) são o maior bloco de trabalho novo. Os passos 8, 12 e 20 são os mais fáceis de adiar sem quebrar nada.
+
+## Diferenças do plano
+
+- **Guest que convida recebe 403** (não 400): é falta de permissão, não de dados inválidos. Convidar um guest e convidar a si mesmo respondem 400.
+- **Convidar não muda o `updatedAt`** do documento: ele significa "última edição", e compartilhar não é editar. Quem é convidado vê o documento ordenado pela última edição real.
+- **Não foi preciso criar índice em `user.email`**: a ideia era conferir se o better-auth criava; num teste local ele não criou, e criar um à mão arrisca conflito com o do adapter. Virou item em `docs/todos.md`.
+- **O 404 já parava o sync**: o `isRetryable` trata qualquer 4xx (exceto 408/429) como falha permanente. O passo 22 ficou em reagir a isso (recarregar o papel e avisar), não em parar o retry.
+- **Guest no diálogo**: em vez de botão desabilitado com tooltip, o diálogo mostra um convite para criar conta ou entrar.
+- **Mock de auth nos testes**: as rotas são testadas com o `authMiddleware` trocado por um que lê o usuário de headers (`src/test/mock-auth.ts`). A integração real com o Better Auth foi conferida à mão (sign-up, sign-in, convite, mudança de papel, saída, guest) contra um banco descartável.
+- **Typecheck dos testes** (`tsconfig.test.json`, script `typecheck`) entrou no CI, já que o `tsc` do build exclui os testes.

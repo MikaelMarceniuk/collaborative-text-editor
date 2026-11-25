@@ -85,3 +85,7 @@ pnpm dev
 - [x] Atualizar o `MONGO_URL` no `.env.example`
 - [x] Testar do zero: apagar `.docker-data`, rodar `pnpm dev`, fazer sign-up por e-mail (testa a transação)
 - [x] Descomentar a seção "Running locally" do README
+
+## Testes do server
+
+`pnpm --filter @collaborative-text-editor/server test` roda o Vitest contra o Mongo do `compose-dev.yml`, no banco `collaborative-editor-test` (a porta vem do `MONGO_PORT` do `.env` da raiz; `TEST_MONGO_URL` sobrescreve a URL inteira). O `src/test/setup.ts` recusa rodar em qualquer banco cujo nome não termine em `-test`, porque limpa as coleções a cada teste. No CI, o `server-ci.yml` sobe um `mongo:8` como service.

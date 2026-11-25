@@ -16,7 +16,7 @@ Mostrar domínio da stack MERN em um cenário difícil de verdade: tempo real, s
 | Banco | MongoDB (driver nativo) |
 | Cache / pub-sub | Redis (adapter do Socket.IO para escalar horizontalmente) |
 | Auth | Better Auth (e-mail + senha, verificação por e-mail via Resend, guest anônimo), sessão em cookie |
-| Testes | Vitest, Supertest, Playwright |
+| Testes | Vitest, Supertest (server, feito), Playwright (a fazer) |
 | Infra | Docker Compose (dev), CI/CD no GitHub Actions, Fly.io (API) + Vercel (web) + Mongo Atlas |
 
 ## Funcionalidades
@@ -83,9 +83,10 @@ DELETE /api/documents/:id
 GET    /api/documents/:id/content   # estado Yjs (octet-stream)
 POST   /api/documents/:id/updates   # update incremental Yjs (octet-stream); sai de cena com o Socket.IO
 
-POST   /api/documents/:id/members            # a fazer
-PATCH  /api/documents/:id/members/:userId   # a fazer
-DELETE /api/documents/:id/members/:userId   # a fazer
+GET    /api/documents/:id/members            # qualquer membro, com nome e e-mail
+POST   /api/documents/:id/members            # dono convida por e-mail (editor | viewer)
+PATCH  /api/documents/:id/members/:userId   # dono muda o papel
+DELETE /api/documents/:id/members/:userId   # dono remove; membro sai (o próprio userId)
 
 GET    /api/documents/:id/versions            # V2
 POST   /api/documents/:id/versions/:versionId/restore   # V2
@@ -99,14 +100,14 @@ POST   /api/documents/:id/versions/:versionId/restore   # V2
 | 2 | CRUD de documentos e tela de listagem | feito |
 | 3 | Editor com Tiptap e autosave via REST | feito (já com Yjs, ver `document-persistence.md`) |
 | 4 | Tempo real com Socket.IO + Yjs, persistência com debounce | a fazer |
-| 5 | Presença (cursores), compartilhamento e permissões | a fazer |
+| 5 | Presença (cursores), compartilhamento e permissões | compartilhamento e permissões feitos (`docs/sharing.md`); presença a fazer |
 | 6 | Redis adapter, testes de integração e E2E com dois navegadores | a fazer |
 | 7 | Histórico de versões e busca | a fazer |
 | 8 | Deploy, README caprichado, GIF de demo, polimento | deploy feito; o resto a fazer |
 
 ### Próximo passo
 
-Compartilhamento e permissões vêm antes do Socket.IO, porque a sala do socket valida o papel do usuário. Plano em `docs/sharing.md` (a criar). O todo do membro duplicado ao juntar documentos de guest (`docs/todos.md`) entra junto.
+Compartilhamento e permissões estão prontos (`docs/sharing.md`), então a sala do socket já pode validar o papel do usuário. Segue a semana 4: Socket.IO + Yjs com persistência com debounce. Ao entrar, o `PATCH`/`DELETE` de membros deve derrubar a conexão de quem perdeu acesso (hoje isso só aparece no próximo refetch).
 
 ## O que destacar no README
 

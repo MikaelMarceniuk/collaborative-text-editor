@@ -22,5 +22,7 @@ Hoje o `sessionLoader` (rota raiz) só roda no primeiro acesso/F5 e depois de si
 
 ## Guest (`apps/server`)
 
-- [ ] **Membro duplicado ao juntar documentos**: quando existir compartilhamento, o guest pode entrar numa conta que já é membro de um documento dele. O `transferGuestDocuments` deixaria dois membros com o mesmo `userId`. Juntar as participações e ficar com o papel mais alto.
+- [x] **Membro duplicado ao juntar documentos**: não acontece, porque guest não compartilha nem pode ser convidado (a API responde 403/400), então o documento de um guest só tem ele como membro. A invariante está documentada em `transfer-guest-documents.test.ts`. Se essa regra mudar, o `transferGuestDocuments` precisa juntar as participações e ficar com o papel mais alto.
 - [ ] **Índice em `session.userId`**: o job de guests abandonados faz `$lookup` em `session` por `userId`. Conferir se o better-auth cria esse índice no Mongo; se não, criar (`{ userId: 1, expiresAt: 1 }`).
+- [ ] **Índice em `user.email`**: o convite por e-mail (`POST /members`) e o sign-in buscam usuário por `email`. Num teste local, o Mongo só tinha o índice `_id_` na coleção `user`, ou seja, o adapter do better-auth não criou o índice de e-mail. Conferir (`db.user.getIndexes()`) e, antes de criar um à mão, ver como o better-auth nomeia o dele para não gerar conflito de índice (um nome diferente para a mesma chave faz o `createIndex` falhar). O mesmo vale para o índice de `session.userId` acima.
+- [ ] **Rate limit compartilhado entre instâncias**: o limite de convites (`invite-rate-limit.middleware.ts`) conta em memória, então com várias instâncias do server cada uma conta sozinha. Trocar para um store no Redis junto com o Redis adapter do Socket.IO.
