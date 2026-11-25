@@ -9,6 +9,7 @@ import { type AccessNotifier, resetAccessNotifier, setAccessNotifier } from './a
 import { createDocumentRooms } from './document-rooms.js';
 import { registerDocumentSocket } from './document-socket.js';
 import { documentRoomName, memberRoomName } from './room-names.js';
+import { createRoomPeers, noopRoomPeers, PEERS_TIMEOUT_MS } from './room-peers.js';
 import { authenticateSocket } from './socket-auth.js';
 
 export const SOCKET_PATH = '/api/socket.io';
@@ -32,10 +33,15 @@ export const createSocketServer = (httpServer: HttpServer, { redis }: SocketServ
 		maxHttpBufferSize: MAX_MESSAGE_BYTES,
 		cors: { origin: env.WEB_URL, credentials: true },
 		// With Redis, what is broadcast to a room reaches the sockets of every instance
-		...(redis && { adapter: createAdapter(redis.pub, redis.sub) }),
+		...(redis && {
+			adapter: createAdapter(redis.pub, redis.sub, { requestsTimeout: PEERS_TIMEOUT_MS }),
+		}),
 	});
 
-	const rooms = createDocumentRooms();
+	// Only the Redis adapter carries messages between instances (serverSideEmit)
+	const peers = redis ? createRoomPeers(io, redis) : noopRoomPeers;
+	const rooms = createDocumentRooms({ peers });
+	peers.listen(rooms);
 
 	io.use(authenticateSocket);
 	io.on('connection', (socket) => registerDocumentSocket(rooms, socket));
