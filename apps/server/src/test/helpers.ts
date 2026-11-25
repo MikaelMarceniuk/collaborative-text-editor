@@ -1,6 +1,6 @@
 import { ObjectId } from 'mongodb';
 
-import { collections } from '../config/mongodb.js';
+import { collections, db } from '../config/mongodb.js';
 import type { DocumentModel, DocumentRole } from '../models/document.model.js';
 
 export const newUserId = () => new ObjectId();
@@ -34,4 +34,32 @@ export const createDocument = async ({
 	await collections.documents.insertOne(document);
 
 	return document;
+};
+
+interface CreateUserOptions {
+	name?: string;
+	email?: string;
+	isAnonymous?: boolean;
+}
+
+// Inserts a user the way Better Auth stores it, so routes that look users up by id or email can find it
+export const createUser = async ({
+	name = 'Test user',
+	email,
+	isAnonymous = false,
+}: CreateUserOptions = {}) => {
+	const _id = new ObjectId();
+	const now = new Date();
+
+	await db.collection('user').insertOne({
+		_id,
+		name,
+		email: email ?? `${_id.toHexString()}@test.local`,
+		emailVerified: true,
+		isAnonymous,
+		createdAt: now,
+		updatedAt: now,
+	});
+
+	return { id: _id, name, email: email ?? `${_id.toHexString()}@test.local` };
 };

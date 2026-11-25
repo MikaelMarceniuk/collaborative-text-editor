@@ -11,10 +11,12 @@ import {
 } from '../../services/document-content.service.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { documentAccess } from '../middleware/document-access.middleware.js';
+import { documentMembersRouter } from './document-members.route.js';
 
 export const documentRouter = Router();
 
 documentRouter.use(authMiddleware);
+documentRouter.use('/:id/members', documentMembersRouter);
 
 const documentBodySchema = z.object({
 	title: z.string().trim().min(1).max(200),
