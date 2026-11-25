@@ -79,7 +79,13 @@ Base64 adds about 33% to the payload, and Socket.IO carries binary natively, so 
 It answers each sync without a trip to MongoDB and gives every client the same view of the document. MongoDB stays the source of truth: the room is loaded on the first join, saved with a debounce, and dropped when the last person leaves.
 
 **Why does the server keep no presence state?**
-A cursor is worth nothing a second later, so the server only relays it. A client that just arrived asks the others for their state instead of asking the server, and the server announces a client that left, so its cursor disappears at once and not after the Awareness timeout. With the Redis adapter the relay already crosses instances, so presence needs no extra work there, unlike the in-memory document rooms.
+A cursor is worth nothing a second later, so the server only relays it. A client that just arrived asks the others for their state instead of asking the server, and the server announces a client that left, so its cursor disappears at once and not after the Awareness timeout. With the Redis adapter the relay already crosses instances, so presence needs no extra work there.
+
+**Why is Redis optional, and why only a message bus?**
+Without `REDIS_URL` the server is a single instance and never tries to connect, which is all a small deployment needs. With it, several instances can serve the same document. Redis keeps no document state: MongoDB stays the source of truth and each instance keeps its own `Y.Doc` in memory. The Socket.IO Redis adapter makes broadcasts and presence cross instances, but it does not reach the in-memory rooms, so the instances also tell each other about every update, and a room that opens asks the others what they have not saved yet. If Redis goes away, each instance carries on alone, and when it is back the rooms catch up and send their clients to sync again.
+
+**Why do the messages between instances travel as base64?**
+Socket.IO's server-to-server events are serialized as JSON, which turns a `Uint8Array` into `{"0":1,"1":2}` and drops a binary argument that comes with an acknowledgement. Updates still travel as raw bytes to the browsers; only the instance-to-instance messages are base64.
 
 **Why WebSocket only, with no long-polling fallback?**
 Polling needs sticky sessions as soon as there is more than one server instance. Every current browser supports WebSocket.
@@ -95,7 +101,7 @@ apps/
 │   └── src/
 │       ├── config/      # env validation, MongoDB, Better Auth, mailer
 │       ├── https/       # routes and middleware
-│       ├── realtime/    # Socket.IO: auth, document rooms, debounced saves
+│       ├── realtime/    # Socket.IO: auth, document rooms, debounced saves, rooms across instances
 │       ├── services/    # Yjs merge, guest document transfer
 │       └── jobs/        # abandoned guest cleanup
 └── web/             # React SPA
@@ -147,7 +153,8 @@ The server tests run against the local MongoDB, in a separate `collaborative-edi
 - [x] Live presence: other users' cursors and selections
 - [x] Share documents by email with roles
 - [x] One-command local setup with Docker Compose
-- [ ] Integration and E2E tests (two browsers editing the same document)
+- [x] Several server instances through an optional Redis
+- [ ] E2E tests (two browsers editing the same document)
 - [ ] Version history with snapshots
 
 ## Author

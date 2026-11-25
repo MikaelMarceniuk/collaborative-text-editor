@@ -1,6 +1,6 @@
 # Redis: várias instâncias do server
 
-> **Estado: planejado.** Ainda sem código. Primeira metade da semana 6; o E2E com dois navegadores é a segunda metade e terá o próprio plano.
+> **Estado: implementado** na branch `feat/redis`, um commit por passo da seção "Passos e commits". O que mudou na prática em relação ao plano está em "Diferenças do plano", no fim. Primeira metade da semana 6; o E2E com dois navegadores é a segunda metade e terá o próprio plano.
 
 Hoje o server roda numa instância só (`min_machines_running = 1` no Fly). O tempo real (`docs/realtime.md`) e a presença (`docs/presence.md`) foram escritos para não depender disso, mas duas coisas ainda dependem. Este plano as resolve com o Redis, para o server poder rodar em várias instâncias:
 
@@ -19,7 +19,7 @@ O ponto 2 é a parte difícil e a que o adapter não cobre. O resto é encanamen
   - **Mongo como barramento (change streams).** A gravação tem debounce de segundos, então a latência seria a do debounce.
 - **A instância que recebeu o update é a que grava.** Quando a sala de outra instância aplica o update recebido, ela o aplica no `Y.Doc` mas **não** o põe em `pending`. Gravar em todas multiplicaria as escritas e a disputa pelo `contentVersion` do mesmo documento (`applyDocumentUpdate` faz até 3 tentativas). A troca: se a instância de origem morre dentro da janela de 2 a 10s sem gravar, o update só sobrevive nos clientes (que reenviam o que falta quando reconectam, pelo state vector). Aceito; o shutdown normal chama `flushAll`.
 - **Uma sala nova pergunta às outras o que elas têm.** Ao criar a sala, o server carrega o Mongo e, **antes de responder o primeiro `doc:sync`**, pede às outras instâncias o estado que elas têm daquele documento e aplica por cima. É o que cobre a janela de gravação: o que a instância A ainda não gravou chega à B pelo pedido, e depois disso pelos updates.
-- **Se as outras instâncias não respondem, o join falha** (o socket é desconectado e o cliente tenta de novo com backoff). Entrar com estado velho e depois receber updates cujas dependências faltam deixaria o cliente com um documento incompleto sem erro nenhum; reconectar é melhor que isso.
+- **Se o Redis está no ar e outra instância não responde, o join falha** (o socket é desconectado e o cliente tenta de novo com backoff). Entrar com estado velho e depois receber updates cujas dependências faltam deixaria o cliente com um documento incompleto sem erro nenhum; reconectar é melhor que isso. Se o próprio Redis está fora do ar, é outro caso: ver "Redis fora do ar".
 - **Os updates remotos esperam a sala que está carregando.** O `Map` de salas guarda a promessa da carga. O update que chega durante a carga espera a promessa e é aplicado depois. Aplicar updates do Yjs é idempotente e comutativo, então chegar antes ou depois do estado pedido não muda o resultado. Update para um documento sem sala (e sem carga em andamento) é ignorado: quem entrar depois pega pelo pedido de estado.
 - **Descartar a sala (documento apagado) é uma chamada com ack para todas as instâncias**, antes de desconectar os sockets, como já é hoje na instância local. Sem o ack, o `disconnectSockets` (que viaja por outro canal do Redis) poderia chegar primeiro e os sockets que saem gravariam o documento de volta.
 - **O rate limit de convites passa para o Redis** (`rate-limit-redis` no `express-rate-limit`), porque já temos a conexão, e o todo pedia isso junto com o adapter. Sem `REDIS_URL`, continua em memória.
@@ -33,10 +33,25 @@ Eventos do `io.serverSideEmit`, só entre processos do server (os clientes nunca
 | `room:update` | `documentId`, `update: string` (base64) | não | quem tem a sala (ou a está carregando) aplica no `Y.Doc`, sem pôr em `pending`; as outras ignoram |
 | `room:state` | `documentId` | sim, `string \| null` (base64) | quem tem a sala responde com `Y.encodeStateAsUpdate(ydoc)`; as outras respondem `null` |
 | `room:drop` | `documentId` | sim | quem tem a sala a descarta sem gravar |
+| `room:resync` | nenhum | não | uma instância voltou depois de perder o Redis: quem recebe atualiza as salas com as outras (ver "Redis fora do ar") |
 
 **Tudo vai como string base64, nunca como `Uint8Array`.** O `serverSideEmit` serializa os argumentos como JSON no Redis: um `Uint8Array` chega como objeto `{"0":1,"1":2}`, e um argumento binário junto com ack chega como `{}` (ver "Verificações já feitas"). O `room-peers.ts` é quem codifica e decodifica, então nada fora dele sabe disso. O custo são ~33% a mais de bytes, e o teste de 1,5 MB de ida e volta levou 20ms.
 
 O `doc:update` para os **clientes** continua pelo `socket.to(room).emit`, que agora atravessa as instâncias pelo adapter. Cada update de edição gera, portanto, duas mensagens no Redis: o broadcast do adapter (para os sockets) e o `room:update` (para as salas). Foi mantido assim para o caminho dos clientes ficar como está.
+
+## Redis fora do ar
+
+O Redis é só barramento, então a queda dele não derruba o editor: cada instância segue sozinha. O que se perde são as mensagens do intervalo (pub/sub entrega no máximo uma vez), e o plano cuida disso em duas pontas.
+
+**Enquanto está fora.** A instância não publica `room:update` (o cliente do Redis enfileiraria o comando e o mandaria atrasado e fora de ordem quando voltasse) e abre salas só com o Mongo, sem pedir o estado aos pares (`requestState` devolve `[]` na hora, em vez de esperar). O broadcast para os clientes depende do adapter, então os clientes de instâncias diferentes deixam de se ver até a volta. O rate limit de convites cai para a memória.
+
+**Quando volta.** O `config/redis.ts` detecta a volta (`reconnecting` seguido de `ready` nas duas conexões) e chama os ouvintes de `onReconnect`. O `socket-server.ts` então:
+
+1. Faz `rooms.resync()`: cada sala aberta pede o estado aos pares e aplica. O Yjs só dispara `update` quando algo mudou (inclusive uma deleção, que não muda o state vector), então a sala sabe se aprendeu alguma coisa.
+2. Desconecta, só nesta instância, os sockets das salas que aprenderam (`io.local.in(...).disconnectSockets(true)`). Os clientes perderam as mesmas mensagens que a sala; ao reconectar, o `doc:sync` entrega o que faltava, e eles mandam de volta o que o server não tem.
+3. Manda `room:resync` para as outras instâncias, que fazem o mesmo. Sem isso há uma corrida: as instâncias voltam em momentos diferentes, e a que voltou antes perguntou às outras quando elas ainda não tinham reassinado o canal, recebendo `[]` e nunca descobrindo o que perdeu. Com o aviso, quem volta por último puxa o que as outras têm e faz as outras puxarem o dele. (Essa corrida apareceu em 1 de 3 execuções do teste de queda, e foi o aviso que a resolveu: 10 execuções seguidas depois, sem falha.)
+
+Não foi testado com um Redis que fica fora por muito tempo (minutos), só com conexões derrubadas pelo servidor (`CLIENT KILL`), que reconectam em milissegundos. A lógica é a mesma, mas o enfileiramento do cliente e o tempo de espera de cada pedido mereceriam uma olhada no primeiro uso real.
 
 ## Server (`apps/server`)
 
@@ -99,14 +114,16 @@ Recebe o store por parâmetro (ou o cria a partir do cliente do Redis, se existi
 
 ## Passos e commits
 
-1. `docs`: este plano e o estado no `planner.md`.
+1. `docs`: este plano e o estado no `planner.md`. (feito)
 2. `chore`: Redis no `compose-dev.yml`, no CI, `REDIS_URL` no `env.ts`/`.env.example` e no `local-development.md`.
 3. `feat(server)`: Redis adapter opcional (`config/redis.ts`, `createSocketServer` recebendo o cliente, fechamento no `close()`), com testes dos broadcasts e da presença entre duas instâncias.
 4. `feat(server)`: salas entre instâncias (`room-peers.ts`, `room:update` e `room:state`, carga esperando os pares), com os testes da janela de gravação.
 5. `feat(server)`: descarte de documento e mudança de acesso entre instâncias (`room:drop` com ack), com testes.
 6. `feat(server)`: rate limit de convites compartilhado no Redis.
-7. `feat(server)`: ressincronizar as salas quando o Redis volta (ver Riscos). Decidido: entra no plano (antes era opcional).
+7. `feat(server)`: ressincronizar as salas quando o Redis volta (ver "Redis fora do ar"). Entrou no plano por decisão sua (antes era opcional).
 8. `docs`: fechar o plano (README, planner, todos, diferenças do plano).
+
+Os passos 2 a 8 foram feitos, cada um num commit.
 
 ## Riscos e pontos a conferir
 
@@ -171,4 +188,12 @@ Nada disso entra em código, e o deploy é seu:
 
 ## Diferenças do plano
 
-(Preencher ao implementar.)
+- **O Redis continua opcional em tudo, e o `pnpm dev` normal não o sobe.** Você decidiu que talvez não use Redis no Fly. Sem `REDIS_URL` o server não tenta conectar (conferido subindo o `dist/server.js` sem a variável: nenhum log nem conexão do Redis). No `compose-dev.yml` o serviço está num *profile* (`redis`), e `pnpm dev:redis` sobe com ele. Os testes de duas instâncias são pulados sem `TEST_REDIS_URL` em vez de falhar (o plano dizia "falham com mensagem clara"): com o Redis opcional, quem não tem o container continua com a suíte verde. O CI sempre os roda.
+- **Quem cria a conexão do Redis é quem a fecha.** O plano dizia que o `close()` do socket server fechava as conexões. Ficou como o `mongoClient`: o `server.ts` cria, passa para `createSocketServer` e fecha depois do `close()`. Nos testes, cada instância tem a sua conexão.
+- **O `stateOf` não espera uma sala que ainda carrega.** O plano pedia que a pergunta esperasse a sala (como o `applyRemoteUpdate`), mas isso trava: dois clientes abrindo o mesmo documento ao mesmo tempo em instâncias diferentes deixam as duas salas esperando a resposta uma da outra até o timeout de 2s, e o join falha. Apareceu no primeiro teste com duas instâncias. Agora a sala só responde depois de carregada (um mapa `loaded` ao lado do mapa de promessas); uma sala carregando ainda não tem edição nenhuma, então `null` é a resposta certa. Tem teste (`opens the same document on two instances at once...`).
+- **Redis fora do ar degrada em vez de falhar.** O plano falhava o join em qualquer timeout. Ficou assim só com o Redis no ar e um par mudo. Com o Redis fora (cliente não pronto), a instância abre a sala só com o Mongo e não publica; antes disso, o `requestState` ficaria pendurado (o cliente enfileira o comando enquanto reconecta). Mesmo com o Redis no ar, o pedido tem um limite próprio (2,5s), porque o timeout do adapter só conta depois que o comando saiu.
+- **`room:resync` não estava no plano.** Veja "Redis fora do ar".
+- **O rate limit usa um store que troca de lugar (`SwitchableRateLimitStore`).** O plano dizia "recebe o store por parâmetro, decidir no passo 6". O `app` é importado antes de o server conectar ao Redis, então o limiter nasce com o store em memória e o `server.ts` chama `useRedis`. Se o Redis não está pronto, volta para a memória (e `passOnStoreError` deixa o convite passar se o store falhar): um limite impreciso por um tempo é melhor que convite parando.
+- **`pub` e `sub` vêm de `config/redis.ts` com `reconnectStrategy` próprio.** A primeira conexão desiste após 3 tentativas (URL errada derruba a subida, como o Mongo; conferido apontando para uma porta fechada: sai com código 1), e depois de conectada reconecta para sempre com espera crescente (até 5s).
+- **Testes.** 40 novos (153 no total; sem `TEST_REDIS_URL`, 136 rodam e 17 são pulados). Mutações conferidas à mão: sem o adapter os testes de broadcast falham; sem o `room:drop` o documento apagado seria gravado de volta; sem o ressincronismo os clientes não são derrubados. O teste de queda usa `CLIENT KILL`, que derruba as conexões pelo lado do Redis.
+- **Não validado num navegador com duas instâncias.** Tudo acima foi verificado com testes e com o `server.ts` de verdade (com e sem `REDIS_URL`), não com duas janelas do navegador em duas instâncias. Isso entra no E2E.
