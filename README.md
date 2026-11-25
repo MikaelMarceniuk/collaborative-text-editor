@@ -91,13 +91,14 @@ apps/
 │   └── src/
 │       ├── config/      # env validation, MongoDB, Better Auth, mailer
 │       ├── https/       # routes and middleware
+│       ├── realtime/    # Socket.IO: auth, document rooms, debounced saves
 │       ├── services/    # Yjs merge, guest document transfer
 │       └── jobs/        # abandoned guest cleanup
 └── web/             # React SPA
     └── src/
         ├── components/  # UI, editor (Tiptap), forms
         ├── hooks/       # TanStack Query hooks
-        ├── lib/         # API client, document sync queue
+        ├── lib/         # API client, document socket (sync)
         └── pages/       # routes
 ```
 
