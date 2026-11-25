@@ -1,8 +1,21 @@
 import { io } from 'socket.io-client';
+import {
+	applyAwarenessUpdate,
+	Awareness,
+	encodeAwarenessUpdate,
+	removeAwarenessStates,
+} from 'y-protocols/awareness';
 import * as Y from 'yjs';
 
 // Updates that came from the server (or from the initial sync) carry this origin, so they are not sent back
 export const REMOTE_ORIGIN = Symbol('remote');
+
+/** What each person shares about themselves, next to their cursor (the "user" field of the Awareness state). */
+export interface PresenceUser {
+	id: string;
+	name: string;
+	color: string;
+}
 
 export type SyncStatus = 'connecting' | 'ready' | 'not-found' | 'error';
 export type SaveStatus = 'saved' | 'saving' | 'offline';
@@ -16,6 +29,7 @@ export interface DocumentSyncState {
 interface DocumentSocketOptions {
 	documentId: string;
 	ydoc: Y.Doc;
+	user: PresenceUser;
 	onStateChange: (state: DocumentSyncState) => void;
 	// The server says the user's access changed (role, removal), or the role it reports is not the one seen before
 	onAccessChanged?: () => void;
@@ -32,6 +46,13 @@ type SyncResponse =
 type UpdateResponse = { ok: true } | { ok: false; error: 'forbidden' | 'invalid' };
 
 const ACK_TIMEOUT_MS = 10_000;
+// A cursor moves on every key and click, and only the latest position matters
+const PRESENCE_THROTTLE_MS = 50;
+
+interface PresenceMessage {
+	clientId: number;
+	update: ArrayBuffer | Uint8Array;
+}
 
 // Binary data arrives as an ArrayBuffer in the browser (and as a Buffer, which is already a Uint8Array, in Node)
 const toBytes = (data: ArrayBuffer | Uint8Array) =>
@@ -44,13 +65,19 @@ const toBytes = (data: ArrayBuffer | Uint8Array) =>
  *   so there is no queue of updates to retry.
  * - Afterwards, each local update is sent as it happens and each remote one is applied.
  * - What the user can do (edit or not) comes from the role the server answers on each sync, never from the client.
+ * - The cursors and names of the other people travel in an Awareness, apart from the document (docs/presence.md).
+ *   Presence is not content: viewers share theirs too, and nothing is saved.
  */
 export const createDocumentSocket = ({
 	documentId,
 	ydoc,
+	user,
 	onStateChange,
 	onAccessChanged,
 }: DocumentSocketOptions) => {
+	const awareness = new Awareness(ydoc);
+	awareness.setLocalStateField('user', user);
+
 	const socket = io(window.location.origin, {
 		path: '/api/socket.io',
 		transports: ['websocket'],
@@ -113,6 +140,48 @@ export const createDocumentSocket = ({
 		notify();
 	};
 
+	const sendPresence = () => {
+		// volatile: a position that could not be sent right away is already out of date
+		socket.volatile.emit('awareness:update', {
+			clientId: awareness.clientID,
+			update: encodeAwarenessUpdate(awareness, [awareness.clientID]),
+		} satisfies PresenceMessage);
+	};
+
+	// Leading and trailing: the first change goes out at once, and what happens during the wait goes out after it
+	let presenceTimer: ReturnType<typeof setTimeout> | undefined;
+	let presenceDirty = false;
+	const sendPresenceThrottled = () => {
+		if (presenceTimer) {
+			presenceDirty = true;
+			return;
+		}
+
+		sendPresence();
+		presenceTimer = setTimeout(() => {
+			presenceTimer = undefined;
+			if (!presenceDirty) return;
+			presenceDirty = false;
+			sendPresenceThrottled();
+		}, PRESENCE_THROTTLE_MS);
+	};
+
+	const handleLocalPresence = (
+		{ added, updated, removed }: { added: number[]; updated: number[]; removed: number[] },
+		origin: unknown,
+	) => {
+		if (origin === REMOTE_ORIGIN) return;
+		if (![...added, ...updated, ...removed].includes(awareness.clientID)) return;
+		// Not connected, or still before the first sync: the next sync sends the presence again
+		if (!synced) return;
+		sendPresenceThrottled();
+	};
+
+	const removeRemotePresence = (clientIds: number[]) => {
+		const others = clientIds.filter((clientId) => clientId !== awareness.clientID);
+		if (others.length > 0) removeAwarenessStates(awareness, others, REMOTE_ORIGIN);
+	};
+
 	const runSync = () => {
 		socket
 			.timeout(ACK_TIMEOUT_MS)
@@ -167,6 +236,10 @@ export const createDocumentSocket = ({
 						status = 'ready';
 						online = true;
 						notify();
+
+						// Introduces itself and asks who is here: the others answer with their own state
+						sendPresence();
+						socket.volatile.emit('awareness:query');
 					} catch (syncError) {
 						// Without this, a bad response would leave the page on "Loading document…" forever
 						console.error('Could not apply the synced document:', syncError);
@@ -183,6 +256,9 @@ export const createDocumentSocket = ({
 	socket.on('disconnect', (reason) => {
 		synced = false;
 		online = false;
+		// Nobody can announce that the others left while this connection is down. The ones still there
+		// show up again after the next sync
+		removeRemotePresence([...awareness.getStates().keys()]);
 		notify();
 
 		// The server disconnects on purpose when access changes: the socket does not reconnect by itself then,
@@ -211,15 +287,25 @@ export const createDocumentSocket = ({
 		Y.applyUpdate(ydoc, toBytes(update), REMOTE_ORIGIN);
 	});
 
+	socket.on('awareness:update', (message: PresenceMessage) => {
+		applyAwarenessUpdate(awareness, toBytes(message.update), REMOTE_ORIGIN);
+	});
+
+	socket.on('awareness:query', sendPresence);
+
+	socket.on('awareness:left', (clientId: number) => removeRemotePresence([clientId]));
+
 	socket.on('doc:access-changed', () => {
 		accessChangeAnnounced = true;
 		onAccessChanged?.();
 	});
 
 	ydoc.on('update', handleLocalUpdate);
+	awareness.on('update', handleLocalPresence);
 	notify();
 
 	return {
+		awareness,
 		hasUnsyncedChanges: () => unacked.size > 0,
 		/** For the "Try again" of the error screen: reconnects right away instead of waiting for the next attempt. */
 		retry: () => {
@@ -229,7 +315,11 @@ export const createDocumentSocket = ({
 		},
 		destroy: () => {
 			clearTimeout(startTimer);
+			clearTimeout(presenceTimer);
 			ydoc.off('update', handleLocalUpdate);
+			awareness.off('update', handleLocalPresence);
+			// Stops the Awareness timers. The server tells the others that this client left when the socket closes
+			awareness.destroy();
 			socket.disconnect();
 		},
 	};
