@@ -41,8 +41,9 @@ type SyncResponse =
 type UpdateResponse = { ok: true } | { ok: false; error: 'forbidden' | 'invalid' };
 
 const ACK_TIMEOUT_MS = 10_000;
-// A cursor moves on every key and click, and only the latest position matters
-const PRESENCE_THROTTLE_MS = 50;
+// Caps the cursor at about one message per frame (a mouse selection fires many), without making the cursor of the
+// others lag behind the text: the text is sent at once, so a longer wait here shows up as characters of distance
+const PRESENCE_THROTTLE_MS = 16;
 
 interface PresenceMessage {
 	clientId: number;
@@ -135,11 +136,11 @@ export const createDocumentSocket = ({
 		notify();
 	};
 
-	// Cursor moves are volatile: a position that could not be sent right away is already out of date. The first
-	// presence and the answer to a query are not, because Socket.IO also drops a volatile message sent while the
-	// connection is still writing the previous one (for example the sync diff, in the same tick)
-	const sendPresence = (volatile = false) => {
-		(volatile ? socket.volatile : socket).emit('awareness:update', {
+	// Never volatile: Socket.IO drops a volatile message sent while the connection is still writing the previous one,
+	// and typing is exactly that (a document update and a cursor move together). A dropped position is not replaced
+	// by a newer one when the person stops typing, so the cursor of the others would stay behind
+	const sendPresence = () => {
+		socket.emit('awareness:update', {
 			clientId: awareness.clientID,
 			update: encodeAwarenessUpdate(awareness, [awareness.clientID]),
 		} satisfies PresenceMessage);
@@ -154,7 +155,7 @@ export const createDocumentSocket = ({
 			return;
 		}
 
-		sendPresence(true);
+		sendPresence();
 		presenceTimer = setTimeout(() => {
 			presenceTimer = undefined;
 			if (!presenceDirty) return;
