@@ -4,6 +4,7 @@
 	"scripts": {
 		"dev": "docker compose -f compose-dev.yml up -d --wait && pnpm --parallel -r start:dev",
 		"dev:redis": "docker compose -f compose-dev.yml --profile redis up -d --wait && pnpm --parallel -r start:dev",
+		"e2e": "docker compose -f compose-dev.yml --profile redis up -d --wait && pnpm --filter @collaborative-text-editor/e2e test",
 		"dev:down": "docker compose -f compose-dev.yml --profile redis down"
 	},
 	"keywords": [],
