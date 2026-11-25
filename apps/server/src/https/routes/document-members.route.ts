@@ -7,6 +7,7 @@ import { collections } from '../../config/mongodb.js';
 import { sendShareDocumentEmail } from '../../emails/share-document.js';
 import type { DocumentRole } from '../../models/document.model.js';
 import { documentAccess } from '../middleware/document-access.middleware.js';
+import { inviteRateLimit } from '../middleware/invite-rate-limit.middleware.js';
 
 // Mounted at /api/documents/:id/members. authMiddleware is applied by the parent router.
 export const documentMembersRouter = Router({ mergeParams: true });
@@ -53,78 +54,83 @@ const addMemberSchema = z.object({
 	role: z.enum(['editor', 'viewer']),
 });
 
-documentMembersRouter.post('/', documentAccess({ minRole: 'owner' }), async (req, res) => {
-	// Guests have no email, and their documents are deleted when the guest is abandoned,
-	// which would take the shared document away from everyone else
-	if (res.locals.user.isAnonymous) {
-		res.status(403).json({ error: 'Create an account to share documents' });
-		return;
-	}
+documentMembersRouter.post(
+	'/',
+	inviteRateLimit,
+	documentAccess({ minRole: 'owner' }),
+	async (req, res) => {
+		// Guests have no email, and their documents are deleted when the guest is abandoned,
+		// which would take the shared document away from everyone else
+		if (res.locals.user.isAnonymous) {
+			res.status(403).json({ error: 'Create an account to share documents' });
+			return;
+		}
 
-	const parsed = addMemberSchema.safeParse(req.body);
-	if (!parsed.success) {
-		res.status(400).json({ error: z.prettifyError(parsed.error) });
-		return;
-	}
+		const parsed = addMemberSchema.safeParse(req.body);
+		if (!parsed.success) {
+			res.status(400).json({ error: z.prettifyError(parsed.error) });
+			return;
+		}
 
-	const { email, role } = parsed.data;
+		const { email, role } = parsed.data;
 
-	const invitedUser = await collections.users.findOne({ email });
-	if (!invitedUser) {
-		res.status(404).json({ error: 'No user with this email' });
-		return;
-	}
+		const invitedUser = await collections.users.findOne({ email });
+		if (!invitedUser) {
+			res.status(404).json({ error: 'No user with this email' });
+			return;
+		}
 
-	if (invitedUser._id.equals(res.locals.user.id)) {
-		res.status(400).json({ error: 'You already own this document' });
-		return;
-	}
+		if (invitedUser._id.equals(res.locals.user.id)) {
+			res.status(400).json({ error: 'You already own this document' });
+			return;
+		}
 
-	if (invitedUser.isAnonymous) {
-		res.status(400).json({ error: 'Guests cannot be invited' });
-		return;
-	}
+		if (invitedUser.isAnonymous) {
+			res.status(400).json({ error: 'Guests cannot be invited' });
+			return;
+		}
 
-	// The filter and the $push are one atomic operation, so two simultaneous invites
-	// for the same user cannot both add them
-	const result = await collections.documents.updateOne(
-		{ _id: res.locals.documentId, 'members.userId': { $ne: invitedUser._id } },
-		{ $push: { members: { userId: invitedUser._id, role } } },
-	);
+		// The filter and the $push are one atomic operation, so two simultaneous invites
+		// for the same user cannot both add them
+		const result = await collections.documents.updateOne(
+			{ _id: res.locals.documentId, 'members.userId': { $ne: invitedUser._id } },
+			{ $push: { members: { userId: invitedUser._id, role } } },
+		);
 
-	if (result.matchedCount === 0) {
-		res.status(409).json({ error: 'This user already has access to the document' });
-		return;
-	}
+		if (result.matchedCount === 0) {
+			res.status(409).json({ error: 'This user already has access to the document' });
+			return;
+		}
 
-	const document = await collections.documents.findOne(
-		{ _id: res.locals.documentId },
-		{ projection: { title: 1 } },
-	);
+		const document = await collections.documents.findOne(
+			{ _id: res.locals.documentId },
+			{ projection: { title: 1 } },
+		);
 
-	// Not awaited: the invite is already saved, so a mail failure must not fail the request
-	void sendShareDocumentEmail({
-		to: invitedUser.email,
-		name: invitedUser.name,
-		inviterName: res.locals.user.name,
-		documentTitle: document?.title ?? 'Untitled document',
-		documentUrl: `${env.WEB_URL}/${res.locals.documentId}`,
-		role,
-	}).catch((error) => {
-		// TODO Improve with logs
-		console.error('Failed to send share email:', error);
-	});
-
-	res.status(201).json({
-		member: {
-			userId: invitedUser._id,
-			role,
+		// Not awaited: the invite is already saved, so a mail failure must not fail the request
+		void sendShareDocumentEmail({
+			to: invitedUser.email,
 			name: invitedUser.name,
-			email: invitedUser.email,
-			image: invitedUser.image ?? undefined,
-		},
-	});
-});
+			inviterName: res.locals.user.name,
+			documentTitle: document?.title ?? 'Untitled document',
+			documentUrl: `${env.WEB_URL}/${res.locals.documentId}`,
+			role,
+		}).catch((error) => {
+			// TODO Improve with logs
+			console.error('Failed to send share email:', error);
+		});
+
+		res.status(201).json({
+			member: {
+				userId: invitedUser._id,
+				role,
+				name: invitedUser.name,
+				email: invitedUser.email,
+				image: invitedUser.image ?? undefined,
+			},
+		});
+	},
+);
 
 // Route params can be typed as string | string[], hence the typeof check
 const parseUserId = (value: unknown) =>
