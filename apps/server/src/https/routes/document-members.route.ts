@@ -148,3 +148,37 @@ documentMembersRouter.patch('/:userId', documentAccess({ minRole: 'owner' }), as
 
 	res.json({ member: { userId: memberId, role } });
 });
+
+// The owner removes any other member. Anyone else can only remove themself (leave the document).
+documentMembersRouter.delete('/:userId', documentAccess(), async (req, res) => {
+	const memberId = parseUserId(req.params.userId);
+	if (!memberId) {
+		res.status(404).json({ error: 'Member not found' });
+		return;
+	}
+
+	const isSelf = memberId.equals(res.locals.user.id);
+
+	if (res.locals.role !== 'owner' && !isSelf) {
+		res.status(403).json({ error: 'Forbidden' });
+		return;
+	}
+
+	if (res.locals.role === 'owner' && isSelf) {
+		res.status(400).json({ error: 'The owner cannot leave the document, delete it instead' });
+		return;
+	}
+
+	// The role condition makes sure the owner can never be pulled out, whatever the userId
+	const result = await collections.documents.updateOne(
+		{ _id: res.locals.documentId, 'members.userId': memberId },
+		{ $pull: { members: { userId: { $eq: memberId }, role: { $ne: 'owner' } } } },
+	);
+
+	if (result.matchedCount === 0) {
+		res.status(404).json({ error: 'Member not found' });
+		return;
+	}
+
+	res.status(204).end();
+});
