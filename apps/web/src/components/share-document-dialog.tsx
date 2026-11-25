@@ -69,8 +69,10 @@ export const ShareDocumentDialog = ({ document, open, onOpenChange }: ShareDocum
 				{members.map((member) => (
 					<DocumentMemberRow
 						key={member.userId}
+						documentId={document!._id}
 						member={member}
 						isCurrentUser={member.userId === user.id}
+						canManage={isOwner}
 					/>
 				))}
 			</ul>
