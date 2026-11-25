@@ -124,6 +124,14 @@
 			user-select: none;
 			white-space: nowrap;
 		}
+
+		// Extends to the left when the label would run off the screen (see caret-label-placement-extension.ts)
+		&__caret--flipped .collaboration-carets__label {
+			left: auto;
+			right: -1px;
+			border-bottom-left-radius: 0.25rem;
+			border-bottom-right-radius: 0;
+		}
 	}
 }
 

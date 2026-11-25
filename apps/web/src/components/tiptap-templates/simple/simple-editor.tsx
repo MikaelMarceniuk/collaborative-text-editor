@@ -19,6 +19,7 @@ import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
 
 import { DocumentHeader } from '@/components/document-header';
+import { CaretLabelPlacement } from '@/components/tiptap-extension/caret-label-placement-extension';
 // --- Icons ---
 import { ArrowLeftIcon } from '@/components/tiptap-icons/arrow-left-icon';
 import { HighlighterIcon } from '@/components/tiptap-icons/highlighter-icon';
@@ -236,6 +237,7 @@ export function SimpleEditor({ document, ydoc, awareness, saveStatus }: SimpleEd
 			Collaboration.configure({
 				document: ydoc,
 			}),
+			CaretLabelPlacement,
 			CollaborationCaret.configure({
 				provider: { awareness },
 				// Written to the Awareness when the editor is created, so it has to be the same one the socket shares
