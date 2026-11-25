@@ -17,6 +17,14 @@ describe('room peers while Redis is unreachable', () => {
 		expect(io.serverSideEmit).not.toHaveBeenCalled();
 	});
 
+	it('does not wait for the others to drop a room', async () => {
+		const io = { serverSideEmitWithAck: vi.fn() } as unknown as Server;
+
+		await createRoomPeers(io, disconnectedRedis).dropEverywhere(newObjectId());
+
+		expect(io.serverSideEmitWithAck).not.toHaveBeenCalled();
+	});
+
 	it('asks nobody and starts the room from what it has', async () => {
 		const io = { serverSideEmitWithAck: vi.fn() } as unknown as Server;
 

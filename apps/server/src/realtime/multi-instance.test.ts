@@ -3,16 +3,20 @@ import type { AddressInfo } from 'node:net';
 
 import type { ObjectId } from 'mongodb';
 import { io as connect, type Socket } from 'socket.io-client';
+import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 
+import { app } from '../app.js';
 import { collections } from '../config/mongodb.js';
 import { connectToRedis } from '../config/redis.js';
+import * as contentService from '../services/document-content.service.js';
 import { loadDocumentState } from '../services/document-content.service.js';
 import { asUser, createDocument, createUser } from '../test/helpers.js';
 import { testRedisUrl } from '../test/redis.js';
 import { createSocketServer, SOCKET_PATH } from './socket-server.js';
 
+vi.mock('../https/middleware/auth.middleware.js', () => import('../test/mock-auth.js'));
 vi.mock('./socket-session.js', () => import('../test/mock-socket-session.js'));
 
 /**
@@ -207,5 +211,64 @@ describe.skipIf(!testRedisUrl)('document rooms across instances', () => {
 		await new Promise((resolve) => setTimeout(resolve, 200));
 
 		expect(readText(await loadDocumentState(document._id))).toBe('');
+	});
+});
+
+// The REST routes call the notifier of the last instance that started (access-notifier.ts is a singleton), so the
+// sockets of these tests are on the other instance: a change made "on one machine" must reach the sockets of the other
+describe.skipIf(!testRedisUrl)('access changes across instances', () => {
+	const events = (socket: Socket) => {
+		const received: string[] = [];
+		socket.on('doc:access-changed', () => received.push('access-changed'));
+		socket.on('disconnect', (reason) => received.push(`disconnect:${reason}`));
+		return received;
+	};
+
+	it('disconnects a member whose role changed, on the instance that has their socket', async () => {
+		const [owner, editor] = await Promise.all([createUser(), createUser()]);
+		const document = await createDocument({
+			ownerId: owner.id,
+			members: [{ userId: editor.id, role: 'editor' }],
+		});
+		const instanceWithSocket = await startInstance();
+		await startInstance();
+		const socket = await openDocument(instanceWithSocket, document._id, editor.id);
+		const received = events(socket);
+
+		await request(app)
+			.patch(`/api/documents/${document._id}/members/${editor.id}`)
+			.set(asUser(owner.id))
+			.send({ role: 'viewer' })
+			.expect(200);
+
+		await vi.waitFor(() =>
+			expect(received).toEqual(['access-changed', 'disconnect:io server disconnect']),
+		);
+	});
+
+	it('drops the room of the other instance when the document is deleted, so it is not saved back', async () => {
+		const save = vi.spyOn(contentService, 'applyDocumentUpdate');
+		const [owner, editor] = await Promise.all([createUser(), createUser()]);
+		const document = await createDocument({
+			ownerId: owner.id,
+			members: [{ userId: editor.id, role: 'editor' }],
+		});
+		const instanceWithSocket = await startInstance();
+		await startInstance();
+		const socket = await openDocument(instanceWithSocket, document._id, editor.id);
+		const received = events(socket);
+		await socket.emitWithAck('doc:sync', emptyStateVector());
+		await socket.emitWithAck('doc:update', textUpdate('unsaved'));
+
+		await request(app).delete(`/api/documents/${document._id}`).set(asUser(owner.id)).expect(204);
+
+		await vi.waitFor(() =>
+			expect(received).toEqual(['access-changed', 'disconnect:io server disconnect']),
+		);
+		// The socket left, which would save the pending update if the room had not been dropped
+		await new Promise((resolve) => setTimeout(resolve, 200));
+		expect(save).not.toHaveBeenCalled();
+		expect(instanceWithSocket.socketServer.rooms.size()).toBe(0);
+		save.mockRestore();
 	});
 });

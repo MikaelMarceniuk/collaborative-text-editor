@@ -56,8 +56,14 @@ export const createSocketServer = (httpServer: HttpServer, { redis }: SocketServ
 		documentDeleted: async (documentId) => {
 			const room = documentRoomName(documentId);
 
-			// Dropped first, so the sockets leaving cannot save the deleted document back
+			// Dropped first, here and on the other instances, so the sockets leaving cannot save the deleted document
+			// back. If an instance does not answer, its room is only kept until its sockets leave: the document
+			// is already gone from Mongo, so what that room saves goes nowhere (applyDocumentUpdate finds nothing)
 			await rooms.drop(documentId);
+			await peers.dropEverywhere(documentId).catch((error: unknown) => {
+				// TODO Improve with logs
+				console.error('Could not drop the document room on the other instances:', error);
+			});
 			io.in(room).emit('doc:access-changed');
 			io.in(room).disconnectSockets(true);
 		},
