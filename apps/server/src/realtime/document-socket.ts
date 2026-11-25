@@ -29,7 +29,11 @@ export const registerDocumentSocket = (rooms: DocumentRooms, socket: Socket) => 
 	const { documentId, userId } = data;
 	const room = documentRoomName(documentId);
 
-	registerDocumentAwareness(socket);
+	// The updates this socket sent that are still being applied. The presence it sends right after one of them
+	// points at text the others only have once that update is relayed, so the presence waits for it (see
+	// docs/presence.md, "Order")
+	let updatesInFlight: Promise<void> = Promise.resolve();
+	registerDocumentAwareness(socket, () => updatesInFlight);
 
 	const joined = (async () => {
 		await rooms.join(documentId);
@@ -60,7 +64,7 @@ export const registerDocumentSocket = (rooms: DocumentRooms, socket: Socket) => 
 		}
 	});
 
-	socket.on('doc:update', async (update: unknown, ack: unknown) => {
+	const handleUpdate = async (update: unknown, ack: unknown) => {
 		if (!isBytes(update)) return respond(ack, { ok: false, error: 'invalid' });
 		if (!canEditRole(data.role)) return respond(ack, { ok: false, error: 'forbidden' });
 
@@ -78,5 +82,11 @@ export const registerDocumentSocket = (rooms: DocumentRooms, socket: Socket) => 
 		// The sender already has its own update, so only the others receive it
 		socket.to(room).emit('doc:update', update);
 		respond(ack, { ok: true });
+	};
+
+	socket.on('doc:update', (update: unknown, ack: unknown) => {
+		const handled = handleUpdate(update, ack).catch(() => undefined);
+		// Not a chain of allSettled results: each step resolves to nothing, so nothing piles up
+		updatesInFlight = Promise.all([updatesInFlight, handled]).then(() => undefined);
 	});
 };
