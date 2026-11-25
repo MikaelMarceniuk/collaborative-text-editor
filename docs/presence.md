@@ -1,6 +1,6 @@
 # Presença: cursores e seleção
 
-> **Estado: em andamento** na branch `feat/presence`, um commit por passo da seção "Passos e commits".
+> **Estado: implementado** na branch `feat/presence`, um commit por passo da seção "Passos e commits". O que mudou na prática em relação ao plano está em "Diferenças do plano", no fim.
 
 O tempo real já sincroniza o conteúdo (`docs/realtime.md`). Este plano acrescenta a **presença**: o cursor e a seleção de cada pessoa no documento, com nome e cor, e uma lista de quem está no documento.
 
@@ -76,4 +76,12 @@ Nenhum dos eventos tem ack. Payload de tipo errado, `clientId` que não é intei
 
 ## Diferenças do plano
 
-(preenchido no fim)
+- **`volatile` só nas posições de cursor.** O plano usava `volatile` em tudo. No navegador, a apresentação inicial e o `awareness:query` sumiam: o Socket.IO descarta uma mensagem `volatile` enviada enquanto a conexão ainda escreve a anterior, e os dois saíam no mesmo tick do `doc:update` do sync. Uma aba nova não via ninguém até a próxima pessoa mexer o cursor. Agora só o envio com throttle é `volatile`; a apresentação, o `query` e a resposta ao `query` são mensagens normais. Só apareceu com dois navegadores reais, e os testes do server não pegariam isso (o cliente de teste não escreve no mesmo tick).
+- **O server ignora o `awareness:update` que chega depois do `disconnecting`.** O Socket.IO trata um evento recebido no tick seguinte (`process.nextTick`), mas trata a desconexão na hora. O último cursor de uma aba que fecha logo depois de mexer chegava depois do `awareness:left`, sendo retransmitido sem ninguém para removê-lo. Um flag `gone` descarta essas mensagens (e tem teste).
+- **Os testes do server ficaram no `socket-server.test.ts`**, em dois blocos (`document awareness` e `document awareness on disconnect`), porque os helpers de socket são locais a esse arquivo. São 9 testes novos.
+- **O avatar mostra só as outras pessoas**, sem a própria (o plano dizia "quem está aqui"): quatro avatares e "+N", escondido em telas pequenas. Quem tem duas abas continua sendo uma pessoa.
+- **O `CollaborationCaret` sobrescreve o `user` do estado local** com a opção `user` ao criar o editor, então o editor recebe o mesmo `user` que o socket compartilha (`getPresenceUser`, em `lib/presence.lib.ts`, usado pelos dois). A cor do rótulo do template (`paragraph-node.scss`) passou a ser branca nos dois temas: o texto escuro do template não lia sobre as cores da paleta.
+- **O pacote ficou na 3.32.3**, não na 3.35.0 que o pnpm escolheu. O peer dela pede `@tiptap/core` 3.35.0 e o resto do Tiptap está na 3.32.
+- **O `Awareness` nasce junto com o socket** (`createDocumentSocket`) e chega ao editor pelo hook, em estado. Isso soma um aviso do lint (`set-state-in-effect`) no `use-document-sync.hook.ts`.
+- **O cursor só existe enquanto o editor tem foco**, um comportamento do `y-tiptap`. Por isso o leitor (editor não editável) aparece nos avatares, mas não tem caret para os outros. Quem perde o foco some do texto, e continua nos avatares.
+- **Validação no navegador** (Chromium do Playwright, um contexto por usuário, script fora do repositório): caret com nome nos dois sentidos, seleção destacada, tema claro e escuro, aba que fecha some em menos de 3s, aba nova vê quem já estava (depois da correção do `volatile`), duas abas da mesma pessoa viram um avatar, leitor vê o dono, e depois de reiniciar o server (`tsx watch`) os avatares somem e voltam sem ninguém tocar em nada. Sem validar: layout em tela pequena e o upgrade de WebSocket em produção (pendência antiga de `docs/realtime.md`).

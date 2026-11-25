@@ -16,6 +16,7 @@ A Notion-style document editor built on **Yjs CRDTs**, designed from day one for
 ## Highlights
 
 - **Real-time collaboration.** Several people edit the same document at once over Socket.IO. Edits are relayed as they happen, and the document converges without conflicts.
+- **Live presence.** Everyone sees the others' cursors and selections, each with a name and a color, plus avatars of who is in the document. It is a Yjs Awareness on the same socket, apart from the document: nothing is saved, and the server relays it without keeping any state. Viewers take part too.
 - **CRDT-based document model.** Content is stored as Yjs binary state, not as HTML or JSON. Concurrent edits merge without conflicts.
 - **Sync by state vector.** On every connection the client and the server exchange what each is missing. Edits made while offline, or lost by a server restart, come back on reconnection, with no retry queue.
 - **Debounced persistence.** The server keeps each open document in memory and saves it to MongoDB after 2s without edits (10s at most), when the last person leaves, and on shutdown. Saves merge into the stored state and never overwrite it.
@@ -76,6 +77,9 @@ Base64 adds about 33% to the payload, and Socket.IO carries binary natively, so 
 
 **Why does the server keep a Y.Doc per open document?**
 It answers each sync without a trip to MongoDB and gives every client the same view of the document. MongoDB stays the source of truth: the room is loaded on the first join, saved with a debounce, and dropped when the last person leaves.
+
+**Why does the server keep no presence state?**
+A cursor is worth nothing a second later, so the server only relays it. A client that just arrived asks the others for their state instead of asking the server, and the server announces a client that left, so its cursor disappears at once and not after the Awareness timeout. With the Redis adapter the relay already crosses instances, so presence needs no extra work there, unlike the in-memory document rooms.
 
 **Why WebSocket only, with no long-polling fallback?**
 Polling needs sticky sessions as soon as there is more than one server instance. Every current browser supports WebSocket.
@@ -138,7 +142,7 @@ The server tests run against the local MongoDB, in a separate `collaborative-edi
 - [x] CRDT persistence with incremental sync and resilient autosave
 - [x] CI/CD to Fly.io and Vercel
 - [x] Real-time collaboration over Socket.IO
-- [ ] Live presence: other users' cursors and selections
+- [x] Live presence: other users' cursors and selections
 - [x] Share documents by email with roles
 - [x] One-command local setup with Docker Compose
 - [ ] Integration and E2E tests (two browsers editing the same document)
