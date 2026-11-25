@@ -181,7 +181,7 @@ export function SimpleEditor({ document, content }: SimpleEditorProps) {
 	const { user } = useAuthenticatedSession();
 	const role = document.members.find((member) => member.userId === user.id)?.role;
 	const canEdit = canEditDocument(role);
-	const { ydoc, saveStatus } = useDocumentSync(document._id, content);
+	const { ydoc, saveStatus } = useDocumentSync(document._id, content, { canEdit });
 
 	const editor = useEditor({
 		immediatelyRender: false,
@@ -232,6 +232,12 @@ export function SimpleEditor({ document, content }: SimpleEditorProps) {
 		],
 	});
 
+	// The role can change while the document is open (the owner changes it, and the document
+	// is refetched when the tab gets focus), and editable is only read when the editor is created
+	useEffect(() => {
+		editor?.setEditable(canEdit);
+	}, [editor, canEdit]);
+
 	const rect = useCursorVisibility({
 		editor,
 		overlayHeight: toolbarRef.current?.getBoundingClientRect().height ?? 0,
@@ -268,36 +274,39 @@ export function SimpleEditor({ document, content }: SimpleEditorProps) {
 				<DocumentHeader
 					document={document}
 					saveStatus={canEdit ? saveStatus : undefined}
+					isViewOnly={!canEdit}
 					onTitleDone={() => editor?.commands.focus()}
 					isSearchAndReplaceOpen={isSearchAndReplaceOpen}
 					onSearchAndReplaceClick={toggleSearchAndReplace}
 					searchAndReplaceButtonRef={searchAndReplaceButtonRef}
 				/>
 
-				<Toolbar
-					ref={toolbarRef}
-					className="simple-editor-toolbar"
-					style={{
-						...(isMobile
-							? {
-									bottom: `calc(100% - ${height - rect.y}px)`,
-								}
-							: {}),
-					}}
-				>
-					{mobileView === 'main' ? (
-						<MainToolbarContent
-							onHighlighterClick={() => setMobileView('highlighter')}
-							onLinkClick={() => setMobileView('link')}
-							isMobile={isMobile}
-						/>
-					) : (
-						<MobileToolbarContent
-							type={mobileView === 'highlighter' ? 'highlighter' : 'link'}
-							onBack={() => setMobileView('main')}
-						/>
-					)}
-				</Toolbar>
+				{canEdit && (
+					<Toolbar
+						ref={toolbarRef}
+						className="simple-editor-toolbar"
+						style={{
+							...(isMobile
+								? {
+										bottom: `calc(100% - ${height - rect.y}px)`,
+									}
+								: {}),
+						}}
+					>
+						{mobileView === 'main' ? (
+							<MainToolbarContent
+								onHighlighterClick={() => setMobileView('highlighter')}
+								onLinkClick={() => setMobileView('link')}
+								isMobile={isMobile}
+							/>
+						) : (
+							<MobileToolbarContent
+								type={mobileView === 'highlighter' ? 'highlighter' : 'link'}
+								onBack={() => setMobileView('main')}
+							/>
+						)}
+					</Toolbar>
+				)}
 
 				<SearchAndReplace
 					className="simple-editor-search-and-replace"
