@@ -8,6 +8,7 @@ import * as Y from 'yjs';
 
 import { applyDocumentUpdate, loadDocumentState } from '../services/document-content.service.js';
 import { asUser, createDocument, createUser } from '../test/helpers.js';
+import { accessNotifier } from './access-notifier.js';
 import { createSocketServer, SOCKET_PATH } from './socket-server.js';
 
 vi.mock('./socket-session.js', () => import('../test/mock-socket-session.js'));
@@ -405,5 +406,76 @@ describe('document awareness', () => {
 		editorSocket.emit('awareness:update', presence(1));
 
 		expect(await leaks).toBe(true);
+	});
+});
+
+describe('document awareness on disconnect', () => {
+	const sendPresence = (socket: Socket, clientId: number) =>
+		socket.emit('awareness:update', { clientId, update: new Uint8Array(1) });
+
+	it('tells the others which client left', async () => {
+		const { owner, editor, open } = await setupMembers();
+		const [ownerSocket, editorSocket] = await Promise.all([open(owner), open(editor)]);
+		await Promise.all(
+			[ownerSocket, editorSocket].map((socket) =>
+				socket.emitWithAck('doc:sync', emptyStateVector()),
+			),
+		);
+		sendPresence(editorSocket, 42);
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		const left = nextEvent<number>(ownerSocket, 'awareness:left');
+		editorSocket.disconnect();
+
+		expect(await left).toBe(42);
+	});
+
+	it('relays nothing that arrives after the socket disconnected', async () => {
+		const { owner, editor, open } = await setupMembers();
+		const [ownerSocket, editorSocket] = await Promise.all([open(owner), open(editor)]);
+		await Promise.all(
+			[ownerSocket, editorSocket].map((socket) =>
+				socket.emitWithAck('doc:sync', emptyStateVector()),
+			),
+		);
+
+		const nothingArrives = noEventWithin(ownerSocket, 'awareness:update');
+		sendPresence(editorSocket, 9);
+		editorSocket.disconnect();
+
+		expect(await nothingArrives).toBe(true);
+	});
+
+	it('says nothing when the socket never sent presence', async () => {
+		const { owner, editor, open } = await setupMembers();
+		const [ownerSocket, editorSocket] = await Promise.all([open(owner), open(editor)]);
+		await Promise.all(
+			[ownerSocket, editorSocket].map((socket) =>
+				socket.emitWithAck('doc:sync', emptyStateVector()),
+			),
+		);
+
+		const silence = noEventWithin(ownerSocket, 'awareness:left');
+		editorSocket.disconnect();
+
+		expect(await silence).toBe(true);
+	});
+
+	it('tells the others when the server drops a member whose access changed', async () => {
+		const { document, owner, editor, open } = await setupMembers();
+		const [ownerSocket, editorSocket] = await Promise.all([open(owner), open(editor)]);
+		await Promise.all(
+			[ownerSocket, editorSocket].map((socket) =>
+				socket.emitWithAck('doc:sync', emptyStateVector()),
+			),
+		);
+		sendPresence(editorSocket, 5);
+		await new Promise((resolve) => setTimeout(resolve, 50));
+
+		const left = nextEvent<number>(ownerSocket, 'awareness:left');
+		// What the member routes call after a role change or a removal: it disconnects that member's sockets
+		await accessNotifier.memberChanged(document._id, editor.id);
+
+		expect(await left).toBe(5);
 	});
 });
