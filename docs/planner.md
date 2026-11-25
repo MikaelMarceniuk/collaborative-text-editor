@@ -100,13 +100,13 @@ POST   /api/documents/:id/versions/:versionId/restore   # V2
 | 3 | Editor com Tiptap e autosave via REST | feito (já com Yjs, ver `document-persistence.md`) |
 | 4 | Tempo real com Socket.IO + Yjs, persistência com debounce | feito (`docs/realtime.md`) |
 | 5 | Presença (cursores), compartilhamento e permissões | feito (`docs/sharing.md`, `docs/presence.md`) |
-| 6 | Redis adapter, testes de integração e E2E com dois navegadores | a fazer |
+| 6 | Redis adapter, testes de integração e E2E com dois navegadores | Redis feito (`docs/redis.md`); E2E a fazer |
 | 7 | Histórico de versões e busca | a fazer |
 | 8 | Deploy, README caprichado, GIF de demo, polimento | deploy feito; o resto a fazer |
 
 ### Próximo passo
 
-A presença está pronta (`docs/presence.md`), então a semana 5 fechou. Segue a semana 6: Redis adapter e testes E2E com dois navegadores. O plano do Redis está em `docs/redis.md`; o do E2E vem depois. Antes do Redis adapter, ler "Riscos" em `docs/realtime.md`: as salas em memória de cada instância precisarão receber os updates das outras (a presença já atravessa instâncias, porque só é retransmitida). O E2E é também onde a presença ganha teste automático, que o web ainda não tem.
+O Redis está pronto (`docs/redis.md`): opcional, só entra com `REDIS_URL`, e as salas das instâncias se mantêm em dia. Falta a outra metade da semana 6: o E2E com dois navegadores. Ele é também onde a presença ganha teste automático (o web ainda não tem nenhum) e onde duas instâncias do server são exercitadas com navegadores de verdade, o que ainda não foi feito. Pendente com você: confirmar no próximo deploy que `/api/socket.io` aceita o upgrade de WebSocket, e decidir se o Redis vai para o Fly (ver "Onde hospedar o Redis" em `docs/redis.md`).
 
 ## O que destacar no README
 
