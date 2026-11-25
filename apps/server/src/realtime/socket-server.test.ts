@@ -6,7 +6,7 @@ import { io as connect, type Socket } from 'socket.io-client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 
-import { applyDocumentUpdate } from '../services/document-content.service.js';
+import { applyDocumentUpdate, loadDocumentState } from '../services/document-content.service.js';
 import { asUser, createDocument, createUser } from '../test/helpers.js';
 import { createSocketServer, SOCKET_PATH } from './socket-server.js';
 
@@ -253,5 +253,34 @@ describe('document sync', () => {
 		expect(ownerDoc.getText('t').toString()).toBe(offlineDoc.getText('t').toString());
 		expect(ownerDoc.getText('t').toString()).toContain('server');
 		expect(ownerDoc.getText('t').toString()).toContain('offline');
+	});
+});
+
+describe('persistence over the socket', () => {
+	it('saves the document when the last client disconnects', async () => {
+		const { document, owner, open } = await setupMembers();
+		const socket = await open(owner);
+		await socket.emitWithAck('doc:update', textUpdate('persisted'));
+
+		socket.disconnect();
+
+		// The save runs after the disconnect, so poll until it lands
+		await vi.waitFor(async () => {
+			const stored = new Y.Doc();
+			Y.applyUpdate(stored, await loadDocumentState(document._id));
+			expect(stored.getText('t').toString()).toBe('persisted');
+		});
+	});
+
+	it('saves what the rooms hold when the server closes', async () => {
+		const { document, owner, open } = await setupMembers();
+		const socket = await open(owner);
+		await socket.emitWithAck('doc:update', textUpdate('on shutdown'));
+
+		await socketServer!.close();
+
+		const stored = new Y.Doc();
+		Y.applyUpdate(stored, await loadDocumentState(document._id));
+		expect(stored.getText('t').toString()).toBe('on shutdown');
 	});
 });

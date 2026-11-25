@@ -29,7 +29,11 @@ export const createSocketServer = (httpServer: HttpServer) => {
 	return {
 		io,
 		rooms,
-		// Also closes the HTTP server, so it replaces httpServer.close()
-		close: () => io.close(),
+		// Disconnects the sockets and closes the HTTP server (so it replaces httpServer.close()),
+		// then saves what the rooms still hold. Nothing can arrive after the sockets are gone
+		close: async () => {
+			await io.close();
+			await rooms.flushAll();
+		},
 	};
 };
