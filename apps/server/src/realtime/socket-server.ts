@@ -11,7 +11,7 @@ import { authenticateSocket } from './socket-auth.js';
 
 export const SOCKET_PATH = '/api/socket.io';
 
-// Same limit as the old POST /updates body
+// A single update (for example the diff of a long offline session) is bounded by this
 const MAX_MESSAGE_BYTES = 2 * 1024 * 1024;
 
 export const createSocketServer = (httpServer: HttpServer) => {
