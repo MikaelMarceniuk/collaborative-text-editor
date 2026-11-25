@@ -49,7 +49,7 @@ Nenhum dos eventos tem ack. Payload de tipo errado, `clientId` que não é intei
 
 ## Testes
 
-- **Server** (`document-awareness.test.ts`, mesmo esquema do `socket-server.test.ts`): o update chega aos outros e não volta a quem enviou; o leitor consegue enviar; payload inválido é ignorado e a conexão continua; um segundo `clientId` no mesmo socket é ignorado; `query` chega aos outros; `awareness:left` sai no disconnect com o `clientId` certo e não sai para quem nunca reivindicou.
+- **Server** (bloco `document awareness` do `socket-server.test.ts`, que já tem os helpers de socket): o update chega aos outros e não volta a quem enviou; o leitor consegue enviar; payload inválido é ignorado e a conexão continua; um segundo `clientId` no mesmo socket é ignorado; `query` chega aos outros; `awareness:left` sai no disconnect com o `clientId` certo e não sai para quem nunca reivindicou.
 - **Web:** não há framework de teste ainda. Validação manual no Chromium do Playwright com duas janelas: cursor e seleção nos dois sentidos, fechar a aba, derrubar o server e reconectar, e um leitor olhando um editor. O E2E de dois navegadores é da semana 6.
 
 ## Passos e commits
