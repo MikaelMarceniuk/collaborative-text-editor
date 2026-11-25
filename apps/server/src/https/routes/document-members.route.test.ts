@@ -7,6 +7,7 @@ import { app } from '../../app.js';
 import { collections } from '../../config/mongodb.js';
 import { sendShareDocumentEmail } from '../../emails/share-document.js';
 import { asUser, createDocument, createUser, newUserId } from '../../test/helpers.js';
+import { MAX_INVITES_PER_HOUR } from '../middleware/invite-rate-limit.middleware.js';
 
 vi.mock('../middleware/auth.middleware.js', () => import('../../test/mock-auth.js'));
 vi.mock('../../emails/share-document.js', () => ({
@@ -267,6 +268,23 @@ describe('POST /api/documents/:id/members', () => {
 		});
 
 		expect(response.status).toBe(400);
+	});
+
+	it('responds 429 after too many invites in an hour, counted per user', async () => {
+		const { document, users } = await setup();
+		const body = { email: 'nobody@test.local', role: 'viewer' };
+
+		for (let attempt = 0; attempt < MAX_INVITES_PER_HOUR; attempt++) {
+			const response = await invite(document._id, users.owner, body);
+			expect(response.status).toBe(404);
+		}
+
+		expect((await invite(document._id, users.owner, body)).status).toBe(429);
+
+		// Another user is not affected
+		const other = await createUser();
+		const otherDocument = await createDocument({ ownerId: other.id });
+		expect((await invite(otherDocument._id, other, body)).status).toBe(404);
 	});
 
 	it.each([
