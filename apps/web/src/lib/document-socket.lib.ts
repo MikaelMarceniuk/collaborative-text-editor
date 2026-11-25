@@ -56,6 +56,8 @@ export const createDocumentSocket = ({
 	let synced = false;
 	let canEdit = false;
 	let knownRole: string | undefined;
+	// The server already announced a change of access, so a different role on the next sync is not news
+	let accessChangeAnnounced = false;
 	// Local updates the server has not acknowledged yet
 	const unacked = new Set<symbol>();
 
@@ -113,7 +115,11 @@ export const createDocumentSocket = ({
 
 					Y.applyUpdate(ydoc, response.update, REMOTE_ORIGIN);
 
-					if (knownRole !== undefined && knownRole !== response.role) onAccessChanged?.();
+					// Covers the case where the announcement was lost (for example a connection that dropped on its own)
+					if (knownRole !== undefined && knownRole !== response.role && !accessChangeAnnounced) {
+						onAccessChanged?.();
+					}
+					accessChangeAnnounced = false;
 					knownRole = response.role;
 					canEdit = response.role === 'owner' || response.role === 'editor';
 
@@ -178,7 +184,10 @@ export const createDocumentSocket = ({
 		Y.applyUpdate(ydoc, update, REMOTE_ORIGIN);
 	});
 
-	socket.on('doc:access-changed', () => onAccessChanged?.());
+	socket.on('doc:access-changed', () => {
+		accessChangeAnnounced = true;
+		onAccessChanged?.();
+	});
 
 	ydoc.on('update', handleLocalUpdate);
 	notify();
