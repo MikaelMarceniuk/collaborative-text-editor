@@ -6,6 +6,7 @@ import { env } from '../../config/env.js';
 import { collections } from '../../config/mongodb.js';
 import { sendShareDocumentEmail } from '../../emails/share-document.js';
 import type { DocumentRole } from '../../models/document.model.js';
+import { accessNotifier } from '../../realtime/access-notifier.js';
 import { documentAccess } from '../middleware/document-access.middleware.js';
 import { inviteRateLimit } from '../middleware/invite-rate-limit.middleware.js';
 
@@ -172,6 +173,8 @@ documentMembersRouter.patch('/:userId', documentAccess({ minRole: 'owner' }), as
 		return;
 	}
 
+	await accessNotifier.memberChanged(res.locals.documentId, memberId);
+
 	res.json({ member: { userId: memberId, role } });
 });
 
@@ -205,6 +208,8 @@ documentMembersRouter.delete('/:userId', documentAccess(), async (req, res) => {
 		res.status(404).json({ error: 'Member not found' });
 		return;
 	}
+
+	await accessNotifier.memberChanged(res.locals.documentId, memberId);
 
 	res.status(204).end();
 });
