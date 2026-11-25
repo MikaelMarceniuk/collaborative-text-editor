@@ -18,6 +18,11 @@ export interface RoomPeers {
 	 * Rejects when an instance does not answer in time, so a room never starts from a state that is missing updates.
 	 */
 	requestState: (documentId: ObjectId) => Promise<Uint8Array[]>;
+	/**
+	 * Asks the other instances to drop their room for the document without saving it (it was deleted), and waits
+	 * until they have. Rejects when one does not answer in time.
+	 */
+	dropEverywhere: (documentId: ObjectId) => Promise<void>;
 	/** Starts answering the other instances, using the rooms of this one. Called once, right after the rooms exist. */
 	listen: (handlers: RoomPeersHandlers) => void;
 }
@@ -28,12 +33,15 @@ export interface RoomPeersHandlers {
 	applyRemoteUpdate: (documentId: ObjectId, update: Uint8Array) => Promise<void>;
 	/** The room's state, or null when this instance has no room for the document. */
 	stateOf: (documentId: ObjectId) => Promise<Uint8Array | null>;
+	/** Drops the room for the document without saving it. */
+	drop: (documentId: ObjectId) => Promise<void>;
 }
 
 /** Without Redis there is no one else: updates go nowhere and nobody has anything to add. */
 export const noopRoomPeers: RoomPeers = {
 	publishUpdate: () => {},
 	requestState: async () => [],
+	dropEverywhere: async () => {},
 	listen: () => {},
 };
 
@@ -44,6 +52,24 @@ const decode = (text: string) => new Uint8Array(Buffer.from(text, 'base64'));
 
 const toObjectId = (value: unknown) =>
 	typeof value === 'string' && ObjectId.isValid(value) ? new ObjectId(value) : null;
+
+// Waits for every other instance to answer. The adapter times out the instances that do not answer, but a command
+// waiting for a reconnection never gets that far, so the whole request has its own limit
+const askPeers = async (io: Server, event: string, documentId: ObjectId): Promise<unknown[]> => {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const timeout = new Promise<never>((_, reject) => {
+		timer = setTimeout(
+			() => reject(new Error('The other instances did not answer in time')),
+			PEERS_TIMEOUT_MS + 500,
+		);
+	});
+
+	try {
+		return await Promise.race([io.serverSideEmitWithAck(event, documentId.toHexString()), timeout]);
+	} finally {
+		clearTimeout(timer);
+	}
+};
 
 /**
  * Needs the Redis adapter on the server: the default adapter does not carry serverSideEmit to anyone.
@@ -61,29 +87,18 @@ export const createRoomPeers = (io: Server, redis: RedisConnection): RoomPeers =
 	requestState: async (documentId) => {
 		if (!redis.pub.isReady) return [];
 
-		// The adapter times out the instances that do not answer, but a command waiting for a reconnection
-		// never gets that far, so the whole request has its own limit
-		let timer: ReturnType<typeof setTimeout> | undefined;
-		const timeout = new Promise<never>((_, reject) => {
-			timer = setTimeout(
-				() => reject(new Error('The other instances did not answer in time')),
-				PEERS_TIMEOUT_MS + 500,
-			);
-		});
+		const responses = await askPeers(io, 'room:state', documentId);
 
-		try {
-			const responses: unknown[] = await Promise.race([
-				io.serverSideEmitWithAck('room:state', documentId.toHexString()),
-				timeout,
-			]);
-
-			return responses.filter((state) => typeof state === 'string').map(decode);
-		} finally {
-			clearTimeout(timer);
-		}
+		return responses.filter((state) => typeof state === 'string').map(decode);
 	},
 
-	listen: ({ applyRemoteUpdate, stateOf }) => {
+	dropEverywhere: async (documentId) => {
+		if (!redis.pub.isReady) return;
+
+		await askPeers(io, 'room:drop', documentId);
+	},
+
+	listen: ({ applyRemoteUpdate, stateOf, drop }) => {
 		io.on('room:update', (id: unknown, update: unknown) => {
 			const documentId = toObjectId(id);
 			if (!documentId || typeof update !== 'string') return;
@@ -100,6 +115,18 @@ export const createRoomPeers = (io: Server, redis: RedisConnection): RoomPeers =
 			stateOf(documentId)
 				.then((state) => ack(state && encode(state)))
 				.catch(() => ack(null));
+		});
+
+		io.on('room:drop', (id: unknown, ack: unknown) => {
+			if (typeof ack !== 'function') return;
+
+			const documentId = toObjectId(id);
+			if (!documentId) return ack(false);
+
+			drop(documentId).then(
+				() => ack(true),
+				() => ack(false),
+			);
 		});
 	},
 });

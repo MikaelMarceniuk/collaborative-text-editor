@@ -247,6 +247,7 @@ describe('rooms across instances', () => {
 	const fakePeers = (overrides: Partial<RoomPeers> = {}): RoomPeers => ({
 		publishUpdate: vi.fn(),
 		requestState: vi.fn(async () => []),
+		dropEverywhere: vi.fn(async () => {}),
 		listen: vi.fn(),
 		...overrides,
 	});
