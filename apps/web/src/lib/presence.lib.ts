@@ -19,3 +19,20 @@ export const getPresenceColor = (userId: string) => {
 
 	return PRESENCE_COLORS[hash % PRESENCE_COLORS.length]!;
 };
+
+/** What each person shares about themselves, next to their cursor (the "user" field of the Awareness state). */
+export interface PresenceUser {
+	id: string;
+	name: string;
+	color: string;
+}
+
+export const getPresenceUser = (user: {
+	id: string;
+	name: string;
+	isAnonymous?: boolean | null;
+}): PresenceUser => ({
+	id: user.id,
+	name: user.isAnonymous ? 'Guest' : user.name,
+	color: getPresenceColor(user.id),
+});

@@ -7,15 +7,10 @@ import {
 } from 'y-protocols/awareness';
 import * as Y from 'yjs';
 
+import type { PresenceUser } from './presence.lib';
+
 // Updates that came from the server (or from the initial sync) carry this origin, so they are not sent back
 export const REMOTE_ORIGIN = Symbol('remote');
-
-/** What each person shares about themselves, next to their cursor (the "user" field of the Awareness state). */
-export interface PresenceUser {
-	id: string;
-	name: string;
-	color: string;
-}
 
 export type SyncStatus = 'connecting' | 'ready' | 'not-found' | 'error';
 export type SaveStatus = 'saved' | 'saving' | 'offline';
@@ -140,9 +135,11 @@ export const createDocumentSocket = ({
 		notify();
 	};
 
-	const sendPresence = () => {
-		// volatile: a position that could not be sent right away is already out of date
-		socket.volatile.emit('awareness:update', {
+	// Cursor moves are volatile: a position that could not be sent right away is already out of date. The first
+	// presence and the answer to a query are not, because Socket.IO also drops a volatile message sent while the
+	// connection is still writing the previous one (for example the sync diff, in the same tick)
+	const sendPresence = (volatile = false) => {
+		(volatile ? socket.volatile : socket).emit('awareness:update', {
 			clientId: awareness.clientID,
 			update: encodeAwarenessUpdate(awareness, [awareness.clientID]),
 		} satisfies PresenceMessage);
@@ -157,7 +154,7 @@ export const createDocumentSocket = ({
 			return;
 		}
 
-		sendPresence();
+		sendPresence(true);
 		presenceTimer = setTimeout(() => {
 			presenceTimer = undefined;
 			if (!presenceDirty) return;
@@ -239,7 +236,7 @@ export const createDocumentSocket = ({
 
 						// Introduces itself and asks who is here: the others answer with their own state
 						sendPresence();
-						socket.volatile.emit('awareness:query');
+						socket.emit('awareness:query');
 					} catch (syncError) {
 						// Without this, a bad response would leave the page on "Loading document…" forever
 						console.error('Could not apply the synced document:', syncError);
@@ -291,7 +288,7 @@ export const createDocumentSocket = ({
 		applyAwarenessUpdate(awareness, toBytes(message.update), REMOTE_ORIGIN);
 	});
 
-	socket.on('awareness:query', sendPresence);
+	socket.on('awareness:query', () => sendPresence());
 
 	socket.on('awareness:left', (clientId: number) => removeRemotePresence([clientId]));
 

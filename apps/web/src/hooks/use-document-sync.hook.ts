@@ -5,7 +5,7 @@ import * as Y from 'yjs';
 
 import { toast } from '@/components/ui/toast';
 import { createDocumentSocket, type DocumentSyncState } from '@/lib/document-socket.lib';
-import { getPresenceColor } from '@/lib/presence-color.lib';
+import { getPresenceUser } from '@/lib/presence.lib';
 
 import { documentsQueryKeys } from './use-documents.hook';
 import { useAuthenticatedSession } from './use-session.hook';
@@ -32,11 +32,7 @@ export const useDocumentSync = (documentId: string) => {
 		const sync = createDocumentSocket({
 			documentId,
 			ydoc,
-			user: {
-				id: user.id,
-				name: user.isAnonymous ? 'Guest' : user.name,
-				color: getPresenceColor(user.id),
-			},
+			user: getPresenceUser(user),
 			onStateChange: setState,
 			onAccessChanged: () => {
 				toast.add({ type: 'info', title: 'Your access to this document changed' });
