@@ -23,7 +23,7 @@ services:
     image: mongo:8
     command: ['--replSet', 'rs0', '--bind_ip_all']
     ports:
-      - '127.0.0.1:27018:27017'
+      - '127.0.0.1:${MONGO_PORT:-27017}:27017'
     volumes:
       - ./.docker-data/mongo:/data/db
     healthcheck:
@@ -38,7 +38,8 @@ services:
       start_period: 10s
 ```
 
-- A porta do host é a `27018` (e não a `27017`) para não conflitar com um Mongo que você já tenha rodando na máquina. Dentro do container o Mongo continua na `27017`, e é esse o endereço registrado no `rs.initiate`. Isso só funciona porque o `MONGO_URL` usa `directConnection=true`: o driver conecta direto na porta publicada e não tenta resolver o host do replica set.
+- O `host: 'localhost:27017'` funciona porque o server roda na sua máquina (fora do container) e acessa pela porta publicada.
+- Se você já tem um Mongo na `27017`, crie um `.env` na raiz com `MONGO_PORT=27018` (o Compose lê esse arquivo e ele já é ignorado pelo git) e use a mesma porta no `MONGO_URL` do `apps/server/.env`. O `host` do `rs.initiate` continua `localhost:27017` (a porta de dentro do container): com `directConnection=true` o driver conecta direto na porta publicada, sem resolver o host do replica set.
 - `.docker-data` já está no `.gitignore`.
 
 ### `package.json` (raiz)
@@ -58,7 +59,7 @@ services:
 Trocar o comentário do `MONGO_URL` para o valor local:
 
 ```bash
-MONGO_URL=mongodb://localhost:27018/collaborative-editor?directConnection=true
+MONGO_URL=mongodb://localhost:27017/collaborative-editor?directConnection=true
 ```
 
 ## Primeira execução
