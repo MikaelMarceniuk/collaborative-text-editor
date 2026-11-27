@@ -2,7 +2,11 @@ import type { ObjectId } from 'mongodb';
 import { describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 
-import { applyDocumentUpdate, loadDocumentState } from '../services/document-content.service.js';
+import {
+	applyDocumentUpdate,
+	CONTENT_FIELD,
+	loadDocumentState,
+} from '../services/document-content.service.js';
 import { createDocument, createUser } from '../test/helpers.js';
 import { createDocumentRooms, InvalidUpdateError } from './document-rooms.js';
 import type { RoomPeers } from './room-peers.js';
@@ -221,6 +225,108 @@ describe('saving rooms', () => {
 		await rooms.flushAll();
 
 		expect(save).toHaveBeenCalledOnce();
+	});
+});
+
+describe('versions', () => {
+	// An update with a paragraph in the field the editor writes to, so the room has content to keep
+	const contentUpdate = (text: string) => {
+		const ydoc = new Y.Doc();
+		const paragraph = new Y.XmlElement('paragraph');
+		paragraph.insert(0, [new Y.XmlText(text)]);
+		ydoc.getXmlFragment(CONTENT_FIELD).insert(0, [paragraph]);
+		return Y.encodeStateAsUpdate(ydoc);
+	};
+
+	type AutoVersion = NonNullable<Parameters<typeof createDocumentRooms>[0]>['autoVersion'];
+
+	const setupVersions = async (autoVersion = vi.fn<NonNullable<AutoVersion>>(async () => null)) => {
+		const { documentId } = await setup();
+		const save = vi.fn(async () => {});
+		const rooms = createDocumentRooms({ save, autoVersion });
+		await rooms.join(documentId);
+		return { documentId, rooms, save, autoVersion };
+	};
+
+	it('asks for a version after a save, with the state the room holds', async () => {
+		const { documentId, rooms, autoVersion } = await setupVersions();
+		await rooms.applyUpdate(documentId, contentUpdate('hello'));
+
+		await rooms.leave(documentId);
+
+		const [first] = autoVersion.mock.calls;
+		expect(first![0].when).toBe('due');
+		const ydoc = new Y.Doc();
+		Y.applyUpdate(ydoc, first![0].getState());
+		expect(ydoc.getXmlFragment(CONTENT_FIELD).toString()).toContain('hello');
+	});
+
+	it('asks again, for what changed, when the last socket leaves', async () => {
+		const { documentId, rooms, autoVersion } = await setupVersions();
+		await rooms.applyUpdate(documentId, contentUpdate('hello'));
+
+		await rooms.leave(documentId);
+
+		expect(autoVersion.mock.calls.map(([{ when }]) => when)).toEqual(['due', 'changed']);
+	});
+
+	it('does not ask while someone is still in the room', async () => {
+		const { documentId, rooms, autoVersion } = await setupVersions();
+		await rooms.join(documentId);
+		await rooms.applyUpdate(documentId, contentUpdate('hello'));
+
+		await rooms.leave(documentId);
+
+		expect(autoVersion.mock.calls.map(([{ when }]) => when)).not.toContain('changed');
+	});
+
+	it('does not version a room with no content', async () => {
+		const { documentId, rooms, autoVersion } = await setupVersions();
+		await rooms.applyUpdate(documentId, textUpdate('not the editor field'));
+
+		await rooms.leave(documentId);
+
+		expect(autoVersion).not.toHaveBeenCalled();
+	});
+
+	it('saves and leaves normally when the version cannot be made', async () => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const autoVersion = vi.fn<NonNullable<AutoVersion>>(async () => {
+			throw new Error('mongo is down');
+		});
+		const { documentId, rooms, save } = await setupVersions(autoVersion);
+		await rooms.applyUpdate(documentId, contentUpdate('hello'));
+
+		await rooms.leave(documentId);
+
+		expect(save).toHaveBeenCalledOnce();
+		expect(rooms.size()).toBe(0);
+		error.mockRestore();
+	});
+
+	it('gives the current state, with what is not saved yet, and keeps the room of those inside', async () => {
+		const { documentId, rooms } = await setupVersions();
+		await rooms.applyUpdate(documentId, contentUpdate('unsaved'));
+
+		const state = await rooms.currentState(documentId);
+
+		const ydoc = new Y.Doc();
+		Y.applyUpdate(ydoc, state);
+		expect(ydoc.getXmlFragment(CONTENT_FIELD).toString()).toContain('unsaved');
+		expect(rooms.size()).toBe(1);
+	});
+
+	it('opens a room to give the state of a document nobody has open, and closes it', async () => {
+		const { documentId } = await setup();
+		await applyDocumentUpdate({ documentId, update: contentUpdate('saved') });
+		const rooms = createDocumentRooms();
+
+		const state = await rooms.currentState(documentId);
+
+		const ydoc = new Y.Doc();
+		Y.applyUpdate(ydoc, state);
+		expect(ydoc.getXmlFragment(CONTENT_FIELD).toString()).toContain('saved');
+		expect(rooms.size()).toBe(0);
 	});
 });
 
