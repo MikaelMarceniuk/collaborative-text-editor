@@ -14,6 +14,8 @@ export interface DocumentModel {
 	members: DocumentMember[];
 	ydocState?: Binary;
 	contentVersion?: number;
+	/** When the last automatic version was claimed (see docs/versions.md). */
+	versionedAt?: Date;
 	createdAt: Date;
 	updatedAt: Date;
 }

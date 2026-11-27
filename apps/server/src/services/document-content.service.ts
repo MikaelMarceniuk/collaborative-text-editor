@@ -5,6 +5,9 @@ import { collections } from '../config/mongodb.js';
 
 export class InvalidDocumentUpdateError extends Error {}
 
+/** The Y.XmlFragment the editor writes to: the default field of Tiptap's Collaboration extension. */
+export const CONTENT_FIELD = 'default';
+
 const assertValidDocumentUpdate = (update: Uint8Array) => {
 	try {
 		Y.applyUpdate(new Y.Doc(), update);
