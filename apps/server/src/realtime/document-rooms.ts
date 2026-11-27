@@ -7,6 +7,7 @@ import {
 	loadDocumentState,
 } from '../services/document-content.service.js';
 import { createAutoVersionIfDue } from '../services/document-versions.service.js';
+import { replaceContent } from '../services/replace-content.js';
 import { noopRoomPeers, type RoomPeers } from './room-peers.js';
 
 export class InvalidUpdateError extends Error {}
@@ -233,6 +234,30 @@ export const createDocumentRooms = ({
 			evictIfIdle(room);
 
 			return state;
+		},
+
+		/**
+		 * Makes the content of the document equal to the content of a version, as an edit (see replaceContent).
+		 * Goes the way of any edit: it is saved by this instance and told to the others. Returns the update, so the caller
+		 * can send it to the sockets, or null when nothing changed. Opens the room if nobody has it open, and saves
+		 * and closes it right after.
+		 */
+		restore: async (documentId: ObjectId, snapshot: Uint8Array) => {
+			const room = await getRoom(documentId);
+			const update = replaceContent(room.ydoc, snapshot);
+
+			if (update) {
+				room.pending.push(update);
+				scheduleSave(room);
+				peers.publishUpdate(documentId, update);
+			}
+
+			if (room.sockets === 0) {
+				await flush(room);
+				evictIfIdle(room);
+			}
+
+			return update;
 		},
 
 		/** What the client is missing, given its state vector, plus the server's own state vector. */
