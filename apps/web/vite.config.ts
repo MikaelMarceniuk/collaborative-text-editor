@@ -14,6 +14,8 @@ export default defineConfig({
 		},
 		dedupe: ['yjs'],
 	},
+	// The E2E runs two Vite servers from this same folder; each needs its own pre-bundle cache (see docs/e2e.md)
+	cacheDir: process.env.VITE_CACHE_DIR ?? 'node_modules/.vite',
 	server: {
 		proxy: {
 			// ws: true also proxies the document sockets (/api/socket.io)
