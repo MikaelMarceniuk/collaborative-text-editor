@@ -8,6 +8,7 @@ import type { RedisConnection } from '../config/redis.js';
 import { type AccessNotifier, resetAccessNotifier, setAccessNotifier } from './access-notifier.js';
 import { createDocumentRooms } from './document-rooms.js';
 import { registerDocumentSocket } from './document-socket.js';
+import { resetLiveContent, setLiveContent } from './live-content.js';
 import { documentRoomName, memberRoomName } from './room-names.js';
 import { createRoomPeers, noopRoomPeers, PEERS_TIMEOUT_MS } from './room-peers.js';
 import { authenticateSocket } from './socket-auth.js';
@@ -89,6 +90,17 @@ export const createSocketServer = (httpServer: HttpServer, { redis }: SocketServ
 	};
 	setAccessNotifier(notifier);
 
+	setLiveContent({
+		currentState: rooms.currentState,
+		restore: async (documentId, snapshot) => {
+			const update = await rooms.restore(documentId, snapshot);
+
+			// Everyone in the document, the person who asked included: none of them sent this update. With Redis
+			// the adapter takes it to the sockets of the other instances
+			if (update) io.in(documentRoomName(documentId)).emit('doc:update', update);
+		},
+	});
+
 	return {
 		io,
 		rooms,
@@ -97,6 +109,7 @@ export const createSocketServer = (httpServer: HttpServer, { redis }: SocketServ
 		close: async () => {
 			stopWatchingRedis?.();
 			resetAccessNotifier();
+			resetLiveContent();
 			await io.close();
 			await rooms.flushAll();
 		},

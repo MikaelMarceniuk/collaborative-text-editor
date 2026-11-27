@@ -9,7 +9,7 @@ import {
 } from '../services/document-content.service.js';
 import { createDocument, createUser } from '../test/helpers.js';
 import { createDocumentRooms, InvalidUpdateError } from './document-rooms.js';
-import type { RoomPeers } from './room-peers.js';
+import { noopRoomPeers, type RoomPeers } from './room-peers.js';
 
 const textUpdate = (text: string) => {
 	const ydoc = new Y.Doc();
@@ -327,6 +327,76 @@ describe('versions', () => {
 		Y.applyUpdate(ydoc, state);
 		expect(ydoc.getXmlFragment(CONTENT_FIELD).toString()).toContain('saved');
 		expect(rooms.size()).toBe(0);
+	});
+});
+
+describe('restoring a version', () => {
+	const contentUpdate = (text: string) => {
+		const ydoc = new Y.Doc();
+		const paragraph = new Y.XmlElement('paragraph');
+		paragraph.insert(0, [new Y.XmlText(text)]);
+		ydoc.getXmlFragment(CONTENT_FIELD).insert(0, [paragraph]);
+		return Y.encodeStateAsUpdate(ydoc);
+	};
+
+	const contentOf = (state: Uint8Array) => {
+		const ydoc = new Y.Doc();
+		Y.applyUpdate(ydoc, state);
+		return ydoc.getXmlFragment(CONTENT_FIELD).toString();
+	};
+
+	it('replaces the content of an open room and returns the update for the sockets', async () => {
+		const { documentId } = await setup();
+		const save = vi.fn(async () => {});
+		const rooms = createDocumentRooms({ save, autoVersion: async () => null });
+		await rooms.join(documentId);
+		await rooms.applyUpdate(documentId, contentUpdate('current'));
+		// A client that has what the room has
+		const client = new Y.Doc();
+		Y.applyUpdate(client, (await rooms.sync(documentId, Y.encodeStateVector(client))).update);
+
+		const update = await rooms.restore(documentId, contentUpdate('restored'));
+		Y.applyUpdate(client, update!);
+
+		const { update: state } = await rooms.sync(documentId, Y.encodeStateVector(new Y.Doc()));
+		expect(contentOf(state)).toContain('restored');
+		expect(contentOf(state)).not.toContain('current');
+		expect(client.getXmlFragment(CONTENT_FIELD).toString()).toBe(contentOf(state));
+		// The room stays open for those inside
+		expect(rooms.size()).toBe(1);
+	});
+
+	it('saves the restore like an edit, and tells the other instances', async () => {
+		const { documentId } = await setup();
+		const save = vi.fn<NonNullable<NonNullable<Parameters<typeof createDocumentRooms>[0]>['save']>>(
+			async () => {},
+		);
+		const publishUpdate = vi.fn();
+		const peers: RoomPeers = { ...noopRoomPeers, publishUpdate };
+		const rooms = createDocumentRooms({ save, peers, autoVersion: async () => null });
+		await rooms.join(documentId);
+		await rooms.applyUpdate(documentId, contentUpdate('current'));
+		publishUpdate.mockClear();
+
+		const update = await rooms.restore(documentId, contentUpdate('restored'));
+		await rooms.leave(documentId);
+
+		expect(publishUpdate).toHaveBeenCalledWith(documentId, update);
+		const saved = save.mock.calls.flatMap(([{ update: saved }]) => [saved]);
+		expect(contentOf(Y.mergeUpdates(saved))).toContain('restored');
+	});
+
+	it('restores a document nobody has open: saves it in Mongo and closes the room', async () => {
+		const { documentId } = await setup();
+		await applyDocumentUpdate({ documentId, update: contentUpdate('current') });
+		const rooms = createDocumentRooms({ autoVersion: async () => null });
+
+		await rooms.restore(documentId, contentUpdate('restored'));
+
+		expect(rooms.size()).toBe(0);
+		const stored = contentOf(await loadDocumentState(documentId));
+		expect(stored).toContain('restored');
+		expect(stored).not.toContain('current');
 	});
 });
 
