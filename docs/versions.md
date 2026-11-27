@@ -25,7 +25,7 @@ Hoje, se alguém apaga metade do texto, ou se um colaborador bagunça o document
 | `before-restore` | Logo antes de um restore | o server |
 
 - **Não cria versão de documento vazio** (estado sem conteúdo).
-- **Retenção:** as 50 `auto` mais recentes por documento; as `manual` e `before-restore` nunca são apagadas pela retenção. Ao inserir uma `auto`, o server apaga as que passaram de 50.
+- **Retenção:** as 50 `auto` e as 10 `before-restore` mais recentes por documento; as `manual` nunca são apagadas. Ao inserir uma versão desses dois tipos, o server apaga as que passaram do limite. (O plano original só limitava as `auto`; ver "Limites contra abuso" em "Diferenças do plano".)
 - **Várias instâncias:** duas instâncias podem gravar o mesmo documento quase juntas e as duas julgariam que a versão está atrasada. Quem cria a versão primeiro "reivindica" o horário com um `findOneAndUpdate` atômico em `documents.versionedAt` (só passa se `versionedAt` for mais antigo que o limite, ou se o documento mudou desde ele). Quem não conseguiu a reivindicação não cria nada.
 - **A versão é tirada do `Y.Doc` da sala** (o que está em memória), não do Mongo, porque a sala pode ter edições que ainda não foram gravadas.
 
@@ -130,6 +130,16 @@ O que mudou ao construir, e o que apareceu de verdade:
 - **`POST /versions` recusa documento vazio** (400 "The document is empty"): uma versão sem nada não ajuda ninguém, e é a mesma regra das automáticas.
 - **Apagar o documento também apaga as versões dos documentos de um guest** (`delete-guest-documents`), não só a rota de `DELETE`. O plano só citava a rota.
 
+### Limites contra abuso
+
+Cada versão guarda o documento inteiro, então salvar sem parar enche o Mongo. Três camadas, acrescentadas depois do plano:
+
+- **30 por hora por pessoa** em `POST /versions` e em `restore`, no mesmo contador (o restore também cria um snapshot). Mesmo desenho do limite de convites (`SwitchableRateLimitStore`): memória sem Redis, Redis com ele, e a requisição passa se o contador falha. Responde 429 e a tela mostra "Too many versions saved. Try again later."
+- **Não duplicar o que não mudou.** `POST /versions` compara o documento com a versão mais recente e, se for o mesmo, devolve essa (200, em vez de 201) sem criar outra. Se a pessoa deu um nome que ela não tem, é essa versão que passa a ser `manual` com o nome (e deixa de ser removável pela retenção). O `restore` também não guarda o conteúdo atual quando a versão mais recente já o tem.
+- **Retenção das `before-restore`: as 10 mais recentes.** São uma rede de segurança, não uma escolha da pessoa.
+
+A comparação passa os dois estados por um `Y.Doc` antes de comparar os bytes: o mesmo documento pode estar codificado de formas diferentes (updates juntados pelo Mongo contra a codificação de um `Y.Doc`). Os `sort` das versões desempatam por `_id`: duas versões feitas no mesmo milissegundo deixavam a "mais recente" indefinida (apareceu como um teste intermitente da listagem).
+
 ### Verificações já feitas
 
 - **Aplicar o estado antigo não restaura nada**, e o teste mostra isso antes de mostrar o que funciona (`replace-content.test.ts`). O estado novo, com o conteúdo copiado, converge numa réplica que o recebe e num cliente que ficou offline durante o restore, sem trazer de volta o que foi apagado.
@@ -139,10 +149,10 @@ O que mudou ao construir, e o que apareceu de verdade:
 
 ### Números
 
-- Server: 204 testes com Redis (185 + 19 que precisam do Redis), contra 153 antes. Sem Redis, 185 passam e 19 são pulados.
+- Server: 215 testes com Redis (196 + 19 que precisam do Redis), contra 153 antes. Sem Redis, 196 passam e 19 são pulados.
 - E2E: 19 testes (eram 17), 30 execuções nas duas topologias (eram 26). O spec novo é `tests/versions.spec.ts`.
 
 ### Ficou de fora
 
-- Rate limit nas rotas de versão: salvar versões à mão sem parar enche o Mongo (cada uma guarda o documento inteiro). A retenção só limita as automáticas.
+- Um teto de versões manuais por documento: sem uma rota para apagar versões, o teto deixaria a pessoa sem saída. Se o Mongo pesar, a peça seguinte é um `DELETE /versions/:id` das manuais, com uma tela para isso.
 - Testar a retenção e a reivindicação com um Redis fora do ar, ou duas instâncias gravando o mesmo documento no mesmo instante, ponta a ponta. A reivindicação tem teste de concorrência no serviço (cinco chamadas simultâneas, uma versão), mas não entre instâncias reais.
