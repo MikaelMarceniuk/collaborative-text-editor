@@ -12,7 +12,8 @@ import { app } from '../app.js';
 import { collections } from '../config/mongodb.js';
 import { connectToRedis } from '../config/redis.js';
 import * as contentService from '../services/document-content.service.js';
-import { loadDocumentState } from '../services/document-content.service.js';
+import { CONTENT_FIELD, loadDocumentState } from '../services/document-content.service.js';
+import { createVersion, listVersions } from '../services/document-versions.service.js';
 import { asUser, createDocument, createUser } from '../test/helpers.js';
 import { testRedisUrl } from '../test/redis.js';
 import { createSocketServer, SOCKET_PATH } from './socket-server.js';
@@ -336,5 +337,91 @@ describe.skipIf(!testRedisUrl)('rooms catching up after Redis was gone', () => {
 		await socketA.emitWithAck('doc:update', textUpdate('still works'));
 		expect(readText(await received)).toBe('still works');
 		errors.mockRestore();
+	});
+});
+
+describe.skipIf(!testRedisUrl)('versions across instances', () => {
+	const contentUpdate = (text: string) => {
+		const ydoc = new Y.Doc();
+		const paragraph = new Y.XmlElement('paragraph');
+		paragraph.insert(0, [new Y.XmlText(text)]);
+		ydoc.getXmlFragment(CONTENT_FIELD).insert(0, [paragraph]);
+		return Y.encodeStateAsUpdate(ydoc);
+	};
+
+	const contentOf = (state: Uint8Array) => {
+		const ydoc = new Y.Doc();
+		Y.applyUpdate(ydoc, state);
+		return ydoc.getXmlFragment(CONTENT_FIELD).toString();
+	};
+
+	// Two instances with a person each, and a third one that has nobody in the document. The route goes to the
+	// instance that registered last (the one every REST call of the tests reaches), which is that third one
+	const setupWithThirdInstance = async () => {
+		const base = await setupTwoInstances();
+		await startInstance();
+
+		// The edit is in the client's own document too, as it is in the editor
+		const alice = new Y.Doc();
+		const bob = new Y.Doc();
+		base.socketA.on('doc:update', (update: Uint8Array) => Y.applyUpdate(alice, update));
+		base.socketB.on('doc:update', (update: Uint8Array) => Y.applyUpdate(bob, update));
+		const edit = contentUpdate('written on A');
+		Y.applyUpdate(alice, edit);
+		await base.socketA.emitWithAck('doc:update', edit);
+		await vi.waitFor(() => expect(contentOf(Y.encodeStateAsUpdate(bob))).toContain('written on A'));
+
+		return { ...base, alice, bob };
+	};
+
+	it('saves a version of what is not saved yet on another instance', async () => {
+		const { document, owner } = await setupWithThirdInstance();
+		// The save waits 2s after the last update, so Mongo does not have it
+		expect(contentOf(await loadDocumentState(document._id))).toBe('');
+
+		await request(app)
+			.post(`/api/documents/${document._id}/versions`)
+			.set(asUser(owner.id))
+			.expect(201);
+
+		const [version] = await listVersions(document._id);
+		expect(version?.kind).toBe('manual');
+		const saved = await collections.documentVersions.findOne({ _id: version!._id });
+		expect(contentOf(saved!.snapshot.buffer)).toContain('written on A');
+	});
+
+	it('restores a version for the editors of the other instances', async () => {
+		const { document, owner, instanceA, alice, bob } = await setupWithThirdInstance();
+		const old = await createVersion({
+			documentId: document._id,
+			kind: 'manual',
+			state: contentUpdate('the old text'),
+		});
+
+		await request(app)
+			.post(`/api/documents/${document._id}/versions/${old._id}/restore`)
+			.set(asUser(owner.id))
+			.expect(204);
+
+		for (const ydoc of [alice, bob]) {
+			await vi.waitFor(() =>
+				expect(ydoc.getXmlFragment(CONTENT_FIELD).toString()).toContain('the old text'),
+			);
+			expect(ydoc.getXmlFragment(CONTENT_FIELD).toString()).not.toContain('written on A');
+		}
+		// The room of an instance that was only told about it has it too, for whoever joins later
+		const fresh = await openDocument(instanceA, document._id, owner.id);
+		const response = await fresh.emitWithAck('doc:sync', emptyStateVector());
+		expect(contentOf(response.update)).toContain('the old text');
+		expect(contentOf(response.update)).not.toContain('written on A');
+		// The instance that handled the route saved the restore, which depends on the edit that instance A has not
+		// saved yet. Mongo has it all once A saves too (2s after the last update)
+		await vi.waitFor(
+			async () =>
+				expect(contentOf(await loadDocumentState(document._id))).toContain('the old text'),
+			{ timeout: 6000 },
+		);
+		const kinds = (await listVersions(document._id)).map(({ kind }) => kind);
+		expect(kinds).toContain('before-restore');
 	});
 });
