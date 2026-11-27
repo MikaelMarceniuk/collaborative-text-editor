@@ -1,5 +1,6 @@
 import {
 	IconArrowLeft,
+	IconHistory,
 	IconKeyframeAlignVertical,
 	IconSearch,
 	IconShare,
@@ -15,6 +16,7 @@ import { SaveStatusIndicator } from '@/components/save-status-indicator';
 import { ShareDocumentDialog } from '@/components/share-document-dialog';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { VersionHistoryDialog } from '@/components/version-history-dialog';
 import { ViewOnlyIndicator } from '@/components/view-only-indicator';
 import type { DocumentSummary } from '@/hooks/use-documents.hook';
 import type { SaveStatus } from '@/lib/document-socket.lib';
@@ -41,6 +43,7 @@ export const DocumentHeader = ({
 	searchAndReplaceButtonRef,
 }: DocumentHeaderProps) => {
 	const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+	const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
 	return (
 		<header className="sticky top-0 z-50 flex h-(--document-header-height) items-center gap-1 border-b border-(--tt-toolbar-border-color) bg-(--tt-toolbar-bg-color) px-2 sm:gap-2 sm:px-3">
@@ -69,6 +72,15 @@ export const DocumentHeader = ({
 					<span className="max-sm:sr-only">Share</span>
 				</Button>
 				<Button
+					variant="ghost"
+					size="icon"
+					aria-label="Version history"
+					title="Version history"
+					onClick={() => setIsHistoryOpen(true)}
+				>
+					<IconHistory />
+				</Button>
+				<Button
 					ref={searchAndReplaceButtonRef}
 					variant="ghost"
 					size="icon"
@@ -85,6 +97,11 @@ export const DocumentHeader = ({
 				</div>
 			</div>
 
+			<VersionHistoryDialog
+				document={document}
+				open={isHistoryOpen}
+				onOpenChange={setIsHistoryOpen}
+			/>
 			<ShareDocumentDialog
 				document={document}
 				open={isShareDialogOpen}

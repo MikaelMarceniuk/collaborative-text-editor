@@ -3,17 +3,8 @@
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import { FindAndReplace } from '@tiptap/extension-find-and-replace';
-import { Highlight } from '@tiptap/extension-highlight';
-import { Image } from '@tiptap/extension-image';
-import { TaskItem, TaskList } from '@tiptap/extension-list';
-import { Subscript } from '@tiptap/extension-subscript';
-import { Superscript } from '@tiptap/extension-superscript';
-import { TextAlign } from '@tiptap/extension-text-align';
-import { Typography } from '@tiptap/extension-typography';
 import { Placeholder, Selection } from '@tiptap/extensions';
 import { EditorContent, EditorContext, useEditor } from '@tiptap/react';
-// --- Tiptap Core Extensions ---
-import { StarterKit } from '@tiptap/starter-kit';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
@@ -33,7 +24,6 @@ import '@/components/tiptap-node/heading-node/heading-node.scss';
 import '@/components/tiptap-node/paragraph-node/paragraph-node.scss';
 
 import { LinkIcon } from '@/components/tiptap-icons/link-icon';
-import { HorizontalRule } from '@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension';
 // --- Tiptap Node ---
 import { ImageUploadNode } from '@/components/tiptap-node/image-upload-node/image-upload-node-extension';
 // --- UI Primitives ---
@@ -66,8 +56,9 @@ import { canEditDocument, type DocumentSummary } from '@/hooks/use-documents.hoo
 import { useIsBreakpoint } from '@/hooks/use-is-breakpoint';
 import { useAuthenticatedSession } from '@/hooks/use-session.hook';
 import { useWindowSize } from '@/hooks/use-window-size';
-import type { SaveStatus } from '@/lib/document-socket.lib';
 // --- Lib ---
+import { documentExtensions } from '@/lib/document-extensions.lib';
+import type { SaveStatus } from '@/lib/document-socket.lib';
 import { getPresenceUser } from '@/lib/presence.lib';
 import { handleImageUpload, MAX_FILE_SIZE } from '@/lib/tiptap-utils';
 
@@ -204,23 +195,7 @@ export function SimpleEditor({ document, ydoc, awareness, saveStatus }: SimpleEd
 			},
 		},
 		extensions: [
-			StarterKit.configure({
-				horizontalRule: false,
-				undoRedo: false,
-				link: {
-					openOnClick: false,
-					enableClickSelection: true,
-				},
-			}),
-			HorizontalRule,
-			TextAlign.configure({ types: ['heading', 'paragraph'] }),
-			TaskList,
-			TaskItem.configure({ nested: true }),
-			Highlight.configure({ multicolor: true }),
-			Image,
-			Typography,
-			Superscript,
-			Subscript,
+			...documentExtensions,
 			Selection,
 			Placeholder.configure({ placeholder: 'Start writing…' }),
 			FindAndReplace.configure({
