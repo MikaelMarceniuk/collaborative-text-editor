@@ -22,13 +22,17 @@ const serverProcess = (port: number, webOrigin: string) => ({
 	},
 });
 
-/** One Vite dev server, proxying /api (and the sockets) to one server instance. */
+/**
+ * One Vite dev server, proxying /api (and the sockets) to one server instance. Each one has its own cacheDir: two
+ * Vite servers sharing node_modules/.vite invalidate each other's pre-bundled dependencies on a cold cache, and the
+ * page of one of them answers 504 (Outdated Optimize Dep) and stays blank.
+ */
 const webProcess = (port: number, apiPort: number) => ({
 	command: `pnpm --filter @collaborative-text-editor/web exec vite --port ${port} --strictPort`,
 	url: `http://localhost:${port}`,
 	reuseExistingServer: false,
 	timeout: 60_000,
-	env: { API_URL: `http://localhost:${apiPort}` },
+	env: { API_URL: `http://localhost:${apiPort}`, VITE_CACHE_DIR: `node_modules/.vite-e2e-${port}` },
 });
 
 export default defineConfig<TestOptions>({

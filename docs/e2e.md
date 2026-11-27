@@ -156,7 +156,8 @@ Ordem pensada para cada passo deixar o repositório verde e útil sozinho; os pa
 - **O cenário 13 refaz o cenário quando a pré-condição não vale.** O teste só prova o `room:state` se o texto ainda não estiver no Mongo (a gravação sai 2s depois da última edição). Numa máquina carregada a digitação passava de 2s; o teste agora usa `insertText` (um evento só) e, se a versão salva já não for 0, recomeça com outro documento (`toPass`). Conferido como mutação: com `E2E_REDIS_URL` vazio (servers sem Redis), os dois cenários de `multi-instance.spec.ts` falham porque o Bob recebe o documento vazio.
 - **O cenário 10 é uma guarda parcial.** Medido com o `updatesInFlight` do server desligado de propósito (a presença passando na frente do texto): o teste pegou o cursor sumindo em 2 de 4 execuções. Ele amostra a cada frame e exige zero quadros sem cursor, então um falso verde existe; a cobertura firme dessa regressão continua sendo o teste do server (`relays the presence after the document update`).
 - **Entrou um commit que o plano não tinha:** `test(e2e): Made the offline and the two-instance specs steady under load`, depois do passo 9. A instabilidade do cenário 12 e do 13 só apareceu ao rodar a suíte inteira em carga (8 workers), não rodando cada spec sozinho.
-- **O workflow de CI não foi executado no GitHub.** Foi conferido o YAML, `pnpm install --frozen-lockfile` e `CI=true pnpm e2e` localmente (retries, reporter `github`/`html`); o que só aparece no runner (`playwright install --with-deps`, o cache do navegador, o compose com `--wait`) fica para a primeira execução real do PR.
+- **O workflow de CI não foi executado no GitHub antes do PR.** Foi conferido o YAML, `pnpm install --frozen-lockfile` e `CI=true pnpm e2e` localmente (retries, reporter `github`/`html`); o que só aparece no runner (`playwright install --with-deps`, o cache do navegador, o compose com `--wait`) ficou para a primeira execução real.
+- **Cada Vite tem o seu `cacheDir`.** A primeira execução no GitHub falhou em todos os testes que usam o web B (porta 6174): a página ficava em branco, com `504 (Outdated Optimize Dep)` no console do trace. Os dois Vite saem da mesma pasta (`apps/web`) e dividiam `node_modules/.vite`; sem cache (o runner começa limpo), um invalida o pré-bundle do outro. Localmente nunca apareceu porque a pasta já existia e a máquina é mais rápida (apagar o cache e rodar o smoke continuou verde). O `vite.config.ts` lê `VITE_CACHE_DIR` (padrão igual ao de hoje) e o `playwright.config.ts` passa `node_modules/.vite-e2e-<porta>` a cada instância.
 
 **O que a investigação mostrou sobre o app**
 
@@ -170,6 +171,5 @@ Nenhum bug do app foi confirmado. Os três pontos abaixo apareceram só com a su
 
 ## Pendente
 
-- Rodar o workflow `e2e.yml` num PR de verdade e acertar o que só o runner mostra.
 - Decidir, depois de umas semanas de histórico, se o E2E entra como etapa obrigatória do `cd.yml`.
 - Opcional: investigar o cursor remoto atrasado (acima) com o `y-tiptap`, se um dia incomodar.
