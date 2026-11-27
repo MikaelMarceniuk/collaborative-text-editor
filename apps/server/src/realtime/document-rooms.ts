@@ -1,7 +1,12 @@
 import type { ObjectId } from 'mongodb';
 import * as Y from 'yjs';
 
-import { applyDocumentUpdate, loadDocumentState } from '../services/document-content.service.js';
+import {
+	applyDocumentUpdate,
+	CONTENT_FIELD,
+	loadDocumentState,
+} from '../services/document-content.service.js';
+import { createAutoVersionIfDue } from '../services/document-versions.service.js';
 import { noopRoomPeers, type RoomPeers } from './room-peers.js';
 
 export class InvalidUpdateError extends Error {}
@@ -31,6 +36,8 @@ interface DocumentRoomsOptions {
 	retryBaseMs?: number;
 	retryMaxMs?: number;
 	save?: (params: { documentId: ObjectId; update: Uint8Array }) => Promise<void>;
+	/** Makes an automatic version when it is time (docs/versions.md). A failure never affects the saving. */
+	autoVersion?: typeof createAutoVersionIfDue;
 	/** The rooms of the other server instances. Without Redis there are none. */
 	peers?: RoomPeers;
 }
@@ -47,6 +54,7 @@ export const createDocumentRooms = ({
 	retryBaseMs = 1000,
 	retryMaxMs = 30_000,
 	save = applyDocumentUpdate,
+	autoVersion = createAutoVersionIfDue,
 	peers = noopRoomPeers,
 }: DocumentRoomsOptions = {}) => {
 	// Keyed by the hex id. Holds the promise, so two simultaneous joins share one load
@@ -99,6 +107,24 @@ export const createDocumentRooms = ({
 		return room;
 	};
 
+	// An automatic version of what the room holds now (which may be ahead of Mongo). Never throws: a version that
+	// could not be made is lost, but it must not delay or undo the saving of the document
+	const makeAutoVersion = async (room: Room, when: 'due' | 'changed') => {
+		// Nothing was ever written (or everything was deleted down to nothing): no version worth keeping
+		if (room.ydoc.getXmlFragment(CONTENT_FIELD).length === 0) return;
+
+		try {
+			await autoVersion({
+				documentId: room.documentId,
+				getState: () => Y.encodeStateAsUpdate(room.ydoc),
+				when,
+			});
+		} catch (error) {
+			// TODO Improve with logs
+			console.error('Could not make the automatic version:', error);
+		}
+	};
+
 	const clearTimers = (room: Room) => {
 		clearTimeout(room.idleTimer);
 		clearTimeout(room.maxWaitTimer);
@@ -145,6 +171,7 @@ export const createDocumentRooms = ({
 			const saving = save({ documentId: room.documentId, update: batch })
 				.then(() => {
 					room.retryAttempt = 0;
+					if (!room.dropped) void makeAutoVersion(room, 'due');
 				})
 				.catch((error: unknown) => {
 					// TODO Improve with logs
@@ -189,8 +216,23 @@ export const createDocumentRooms = ({
 			if (room.sockets > 0) return;
 
 			await flush(room);
+			// What was edited since the last version is kept when the last person leaves
+			if (room.sockets === 0 && !room.dropped) await makeAutoVersion(room, 'changed');
 			// A socket may have joined while it was saving
 			evictIfIdle(room);
+		},
+
+		/**
+		 * The whole state of the document right now, as the room has it: for a version made from a route,
+		 * which may run on another instance than the one the editors are connected to (the load asks the others).
+		 * Opens the room if nobody has it open, and closes it right after.
+		 */
+		currentState: async (documentId: ObjectId) => {
+			const room = await getRoom(documentId);
+			const state = Y.encodeStateAsUpdate(room.ydoc);
+			evictIfIdle(room);
+
+			return state;
 		},
 
 		/** What the client is missing, given its state vector, plus the server's own state vector. */

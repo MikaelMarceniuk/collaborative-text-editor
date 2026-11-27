@@ -1,12 +1,10 @@
 import { Binary, ObjectId } from 'mongodb';
-import * as Y from 'yjs';
 
 import { collections } from '../config/mongodb.js';
 import type {
 	DocumentVersionKind,
 	DocumentVersionModel,
 } from '../models/document-version.model.js';
-import { CONTENT_FIELD } from './document-content.service.js';
 
 /** An automatic version is made when the last one is older than this. */
 export const AUTO_VERSION_INTERVAL_MS = 10 * 60 * 1000;
@@ -14,14 +12,6 @@ export const AUTO_VERSION_INTERVAL_MS = 10 * 60 * 1000;
 export const MAX_AUTO_VERSIONS = 50;
 
 export type DocumentVersionSummary = Omit<DocumentVersionModel, 'snapshot'>;
-
-/** A document nobody wrote in has nothing worth keeping. */
-const hasContent = (state: Uint8Array) => {
-	const ydoc = new Y.Doc();
-	Y.applyUpdate(ydoc, state);
-
-	return ydoc.getXmlFragment(CONTENT_FIELD).length > 0;
-};
 
 type createVersionParams = {
 	documentId: ObjectId;
@@ -88,8 +78,8 @@ const trimAutoVersions = async (documentId: ObjectId) => {
 
 type createAutoVersionParams = {
 	documentId: ObjectId;
-	/** The state of the room, which may be ahead of Mongo. */
-	state: Uint8Array;
+	/** The state of the room, which may be ahead of Mongo. Only called when the version is going to be made. */
+	getState: () => Uint8Array;
 	/**
 	 * - "due": the last version is older than AUTO_VERSION_INTERVAL_MS (or there is none). After a save.
 	 * - "changed": the document was saved after the last version, however recent. When the last person leaves.
@@ -105,12 +95,10 @@ type createAutoVersionParams = {
  */
 export const createAutoVersionIfDue = async ({
 	documentId,
-	state,
+	getState,
 	when,
 	now = new Date(),
 }: createAutoVersionParams) => {
-	if (!hasContent(state)) return null;
-
 	const rule =
 		when === 'due'
 			? { versionedAt: { $lt: new Date(now.getTime() - AUTO_VERSION_INTERVAL_MS) } }
@@ -123,7 +111,7 @@ export const createAutoVersionIfDue = async ({
 	);
 	if (!claimed) return null;
 
-	const version = await createVersion({ documentId, kind: 'auto', state });
+	const version = await createVersion({ documentId, kind: 'auto', state: getState() });
 	await trimAutoVersions(documentId);
 
 	return version;

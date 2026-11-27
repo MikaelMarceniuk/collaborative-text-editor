@@ -99,7 +99,7 @@ describe('createAutoVersionIfDue', () => {
 
 		const version = await createAutoVersionIfDue({
 			documentId,
-			state: stateWith('a'),
+			getState: () => stateWith('a'),
 			when: 'due',
 		});
 
@@ -108,33 +108,25 @@ describe('createAutoVersionIfDue', () => {
 		expect((await collections.documents.findOne({ _id: documentId }))?.versionedAt).toBeDefined();
 	});
 
-	it('does not version a document with no content', async () => {
-		const { documentId } = await setup();
-
-		const version = await createAutoVersionIfDue({
-			documentId,
-			state: Y.encodeStateAsUpdate(new Y.Doc()),
-			when: 'due',
-		});
-
-		expect(version).toBeNull();
-		expect(await listVersions(documentId)).toHaveLength(0);
-	});
-
 	it('waits for the interval before making another one ("due")', async () => {
 		const { documentId } = await setup();
 		const start = new Date();
-		await createAutoVersionIfDue({ documentId, state: stateWith('a'), when: 'due', now: start });
+		await createAutoVersionIfDue({
+			documentId,
+			getState: () => stateWith('a'),
+			when: 'due',
+			now: start,
+		});
 
 		const tooSoon = await createAutoVersionIfDue({
 			documentId,
-			state: stateWith('b'),
+			getState: () => stateWith('b'),
 			when: 'due',
 			now: new Date(start.getTime() + AUTO_VERSION_INTERVAL_MS - 1000),
 		});
 		const later = await createAutoVersionIfDue({
 			documentId,
-			state: stateWith('c'),
+			getState: () => stateWith('c'),
 			when: 'due',
 			now: new Date(start.getTime() + AUTO_VERSION_INTERVAL_MS + 1000),
 		});
@@ -147,11 +139,16 @@ describe('createAutoVersionIfDue', () => {
 	it('makes one when the document changed since the last one, however recent ("changed")', async () => {
 		const { documentId } = await setup();
 		const start = new Date();
-		await createAutoVersionIfDue({ documentId, state: stateWith('a'), when: 'due', now: start });
+		await createAutoVersionIfDue({
+			documentId,
+			getState: () => stateWith('a'),
+			when: 'due',
+			now: start,
+		});
 
 		const unchanged = await createAutoVersionIfDue({
 			documentId,
-			state: stateWith('a'),
+			getState: () => stateWith('a'),
 			when: 'changed',
 			now: new Date(start.getTime() + 1000),
 		});
@@ -162,7 +159,7 @@ describe('createAutoVersionIfDue', () => {
 		);
 		const changed = await createAutoVersionIfDue({
 			documentId,
-			state: stateWith('b'),
+			getState: () => stateWith('b'),
 			when: 'changed',
 			now: new Date(start.getTime() + 3000),
 		});
@@ -176,7 +173,7 @@ describe('createAutoVersionIfDue', () => {
 
 		const results = await Promise.all(
 			Array.from({ length: 5 }, () =>
-				createAutoVersionIfDue({ documentId, state: stateWith('a'), when: 'due' }),
+				createAutoVersionIfDue({ documentId, getState: () => stateWith('a'), when: 'due' }),
 			),
 		);
 
@@ -193,7 +190,7 @@ describe('createAutoVersionIfDue', () => {
 		for (let index = 0; index <= MAX_AUTO_VERSIONS; index++) {
 			await createAutoVersionIfDue({
 				documentId,
-				state: stateWith(`v${index}`),
+				getState: () => stateWith(`v${index}`),
 				when: 'due',
 				// Each one past the interval of the previous
 				now: new Date(start + index * (AUTO_VERSION_INTERVAL_MS + minutes(1))),
