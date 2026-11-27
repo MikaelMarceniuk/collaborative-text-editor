@@ -99,6 +99,7 @@ export const DocumentHeader = ({
 
 			<VersionHistoryDialog
 				document={document}
+				canEdit={!isViewOnly}
 				open={isHistoryOpen}
 				onOpenChange={setIsHistoryOpen}
 			/>

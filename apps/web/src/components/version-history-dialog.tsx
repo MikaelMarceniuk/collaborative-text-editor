@@ -1,7 +1,14 @@
-import { IconAlertTriangle, IconHistory, IconRefresh } from '@tabler/icons-react';
+import {
+	IconAlertTriangle,
+	IconDeviceFloppy,
+	IconHistory,
+	IconLoader2,
+	IconRefresh,
+} from '@tabler/icons-react';
 import { cn } from 'cn';
-import { useState } from 'react';
+import { type FormEvent, useState } from 'react';
 
+import { RestoreVersionDialog } from '@/components/restore-version-dialog';
 import { Button } from '@/components/ui/button';
 import {
 	Dialog,
@@ -10,8 +17,10 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VersionPreview } from '@/components/version-preview';
+import { useCreateVersion } from '@/hooks/use-create-version.hook';
 import {
 	type DocumentVersion,
 	type DocumentVersionKind,
@@ -92,14 +101,68 @@ const Preview = ({ documentId, versionId }: PreviewProps) => {
 	return <VersionPreview key={versionId} snapshot={snapshot} />;
 };
 
+const LABEL_MAX_LENGTH = 100;
+
+const SaveVersionForm = ({ documentId }: { documentId: string }) => {
+	const {
+		handleCreateVersion,
+		isCreateVersionPending,
+		createVersionError,
+		resetCreateVersionError,
+	} = useCreateVersion();
+	const [label, setLabel] = useState('');
+
+	const handleSubmit = (event: FormEvent) => {
+		event.preventDefault();
+		handleCreateVersion(
+			{ documentId, label: label.trim() || undefined },
+			{ onSuccess: () => setLabel('') },
+		);
+	};
+
+	return (
+		<form onSubmit={handleSubmit} className="flex flex-col gap-1.5">
+			<div className="flex gap-1.5">
+				<Input
+					value={label}
+					maxLength={LABEL_MAX_LENGTH}
+					placeholder="Name (optional)"
+					aria-label="Name of the version"
+					onChange={(event) => {
+						setLabel(event.target.value);
+						resetCreateVersionError();
+					}}
+				/>
+				<Button
+					type="submit"
+					size="icon"
+					aria-label="Save version"
+					title="Save version"
+					disabled={isCreateVersionPending}
+				>
+					{isCreateVersionPending ? <IconLoader2 className="animate-spin" /> : <IconDeviceFloppy />}
+				</Button>
+			</div>
+			{createVersionError && (
+				<p role="alert" className="text-xs text-destructive">
+					{createVersionError}
+				</p>
+			)}
+		</form>
+	);
+};
+
 interface VersionHistoryDialogProps {
 	document: DocumentSummary;
+	// Only people who can edit save and restore. The others read the history
+	canEdit: boolean;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 }
 
 export const VersionHistoryDialog = ({
 	document,
+	canEdit,
 	open,
 	onOpenChange,
 }: VersionHistoryDialogProps) => {
@@ -108,6 +171,7 @@ export const VersionHistoryDialog = ({
 		{ enabled: open },
 	);
 	const [selectedId, setSelectedId] = useState<string>();
+	const [isRestoreOpen, setIsRestoreOpen] = useState(false);
 
 	// Until the person chooses, the newest version is the one shown
 	const selected = versions.find((version) => version._id === selectedId) ?? versions[0];
@@ -162,20 +226,42 @@ export const VersionHistoryDialog = ({
 	};
 
 	return (
-		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-4xl">
-				<DialogHeader>
-					<DialogTitle>Version history</DialogTitle>
-					<DialogDescription className="truncate">{document.title}</DialogDescription>
-				</DialogHeader>
+		<>
+			<Dialog open={open} onOpenChange={onOpenChange}>
+				<DialogContent className="sm:max-w-4xl">
+					<DialogHeader>
+						<DialogTitle>Version history</DialogTitle>
+						<DialogDescription className="truncate">{document.title}</DialogDescription>
+					</DialogHeader>
 
-				<div className="grid h-[65vh] gap-3 sm:grid-cols-[15rem_1fr]">
-					<div className="overflow-y-auto max-sm:max-h-40">{renderList()}</div>
-					<div className="overflow-y-auto rounded-lg border bg-background">
-						<Preview documentId={document._id} versionId={selected?._id} />
+					<div className="grid h-[65vh] gap-3 sm:grid-cols-[15rem_1fr] max-sm:grid-rows-[auto_1fr]">
+						<div className="flex min-h-0 flex-col gap-3">
+							{canEdit && <SaveVersionForm documentId={document._id} />}
+							<div className="min-h-0 flex-1 overflow-y-auto max-sm:max-h-40">{renderList()}</div>
+						</div>
+						<div className="flex min-h-0 flex-col gap-2">
+							<div className="min-h-0 flex-1 overflow-y-auto rounded-lg border bg-background">
+								<Preview documentId={document._id} versionId={selected?._id} />
+							</div>
+							{canEdit && selected && (
+								<Button className="self-end" size="sm" onClick={() => setIsRestoreOpen(true)}>
+									<IconHistory />
+									Restore this version
+								</Button>
+							)}
+						</div>
 					</div>
-				</div>
-			</DialogContent>
-		</Dialog>
+				</DialogContent>
+			</Dialog>
+
+			<RestoreVersionDialog
+				documentId={document._id}
+				versionId={selected?._id ?? null}
+				versionTitle={selected ? versionTitle(selected) : ''}
+				open={isRestoreOpen}
+				onOpenChange={setIsRestoreOpen}
+				onRestored={() => onOpenChange(false)}
+			/>
+		</>
 	);
 };
