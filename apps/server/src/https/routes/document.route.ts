@@ -5,14 +5,17 @@ import { z } from 'zod';
 import { collections } from '../../config/mongodb.js';
 import type { DocumentModel } from '../../models/document.model.js';
 import { accessNotifier } from '../../realtime/access-notifier.js';
+import { deleteVersionsOf } from '../../services/document-versions.service.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { documentAccess } from '../middleware/document-access.middleware.js';
 import { documentMembersRouter } from './document-members.route.js';
+import { documentVersionsRouter } from './document-versions.route.js';
 
 export const documentRouter = Router();
 
 documentRouter.use(authMiddleware);
 documentRouter.use('/:id/members', documentMembersRouter);
+documentRouter.use('/:id/versions', documentVersionsRouter);
 
 const documentBodySchema = z.object({
 	title: z.string().trim().min(1).max(200),
@@ -86,6 +89,7 @@ documentRouter.patch('/:id', documentAccess({ minRole: 'editor' }), async (req, 
 
 documentRouter.delete('/:id', documentAccess({ minRole: 'owner' }), async (_req, res) => {
 	await collections.documents.deleteOne({ _id: res.locals.documentId });
+	await deleteVersionsOf(res.locals.documentId);
 	await accessNotifier.documentDeleted(res.locals.documentId);
 
 	res.status(204).end();

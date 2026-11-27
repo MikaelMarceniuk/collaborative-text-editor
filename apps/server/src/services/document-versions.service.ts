@@ -1,10 +1,20 @@
 import { Binary, ObjectId } from 'mongodb';
+import * as Y from 'yjs';
 
 import { collections } from '../config/mongodb.js';
 import type {
 	DocumentVersionKind,
 	DocumentVersionModel,
 } from '../models/document-version.model.js';
+import { CONTENT_FIELD } from './document-content.service.js';
+
+/** A document nobody wrote in has nothing worth keeping. */
+export const hasContent = (state: Uint8Array) => {
+	const ydoc = new Y.Doc();
+	Y.applyUpdate(ydoc, state);
+
+	return ydoc.getXmlFragment(CONTENT_FIELD).length > 0;
+};
 
 /** An automatic version is made when the last one is older than this. */
 export const AUTO_VERSION_INTERVAL_MS = 10 * 60 * 1000;
