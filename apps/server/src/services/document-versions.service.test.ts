@@ -12,7 +12,10 @@ import {
 	deleteVersionsOf,
 	getVersion,
 	listVersions,
+	keepBeforeRestore,
 	MAX_AUTO_VERSIONS,
+	MAX_BEFORE_RESTORE_VERSIONS,
+	saveManualVersion,
 } from './document-versions.service.js';
 
 /** A document state with one paragraph, the way the editor writes it. */
@@ -201,5 +204,128 @@ describe('createAutoVersionIfDue', () => {
 		expect(versions.filter(({ kind }) => kind === 'auto')).toHaveLength(MAX_AUTO_VERSIONS);
 		expect(versions.filter(({ kind }) => kind === 'manual')).toHaveLength(1);
 		expect(versions.filter(({ kind }) => kind === 'before-restore')).toHaveLength(1);
+	});
+});
+
+describe('saveManualVersion', () => {
+	it('makes a version, and answers the same one while nothing changes', async () => {
+		const { owner, documentId } = await setup();
+
+		// Each stateWith is a document of its own (another client id), so the same one is reused
+		const state = stateWith('text');
+		const first = await saveManualVersion({ documentId, state, createdBy: owner.id });
+		const again = await saveManualVersion({ documentId, state, createdBy: owner.id });
+
+		expect(first.created).toBe(true);
+		expect(again.created).toBe(false);
+		expect(again.version._id.equals(first.version._id)).toBe(true);
+		expect(await listVersions(documentId)).toHaveLength(1);
+	});
+
+	it('knows the same document in other bytes (the update merged by Mongo against the encoding of a Y.Doc)', async () => {
+		const { owner, documentId } = await setup();
+		const ydoc = new Y.Doc();
+		const paragraph = new Y.XmlElement('paragraph');
+		paragraph.insert(0, [new Y.XmlText('same')]);
+		ydoc.getXmlFragment(CONTENT_FIELD).insert(0, [paragraph]);
+		const encoded = Y.encodeStateAsUpdate(ydoc);
+		// Two updates merged: the same content, in a different sequence of bytes
+		const merged = Y.mergeUpdates([encoded, Y.encodeStateAsUpdate(new Y.Doc())]);
+		await saveManualVersion({ documentId, state: encoded, createdBy: owner.id });
+
+		const again = await saveManualVersion({ documentId, state: merged, createdBy: owner.id });
+
+		expect(again.created).toBe(false);
+	});
+
+	it('makes a new version when the text changed', async () => {
+		const { owner, documentId } = await setup();
+		await saveManualVersion({ documentId, state: stateWith('one'), createdBy: owner.id });
+
+		const next = await saveManualVersion({
+			documentId,
+			state: stateWith('two'),
+			createdBy: owner.id,
+		});
+
+		expect(next.created).toBe(true);
+		expect(await listVersions(documentId)).toHaveLength(2);
+	});
+
+	it('turns the newest version into a named manual one when it is the same text', async () => {
+		const { owner, documentId } = await setup();
+		const state = stateWith('text');
+		const auto = await createAutoVersionIfDue({ documentId, getState: () => state, when: 'due' });
+
+		const named = await saveManualVersion({
+			documentId,
+			state,
+			label: 'Keep this',
+			createdBy: owner.id,
+		});
+
+		expect(named.created).toBe(false);
+		expect(named.version._id.equals(auto!._id)).toBe(true);
+		expect(named.version).toMatchObject({ kind: 'manual', label: 'Keep this' });
+		expect(named.version.createdBy?.equals(owner.id)).toBe(true);
+		// A name it already has changes nothing
+		const same = await saveManualVersion({
+			documentId,
+			state,
+			label: 'Keep this',
+			createdBy: owner.id,
+		});
+		expect(same.version._id.equals(auto!._id)).toBe(true);
+		expect(await listVersions(documentId)).toHaveLength(1);
+	});
+
+	it('never removes the manual ones, however many there are', async () => {
+		const { owner, documentId } = await setup();
+
+		for (let index = 0; index < MAX_AUTO_VERSIONS + 5; index++) {
+			await saveManualVersion({
+				documentId,
+				state: stateWith(`text ${index}`),
+				createdBy: owner.id,
+			});
+		}
+
+		expect(await listVersions(documentId)).toHaveLength(MAX_AUTO_VERSIONS + 5);
+	});
+});
+
+describe('keepBeforeRestore', () => {
+	it('keeps the current content, and the newest ones only', async () => {
+		const { owner, documentId } = await setup();
+		await createVersion({ documentId, kind: 'manual', state: stateWith('manual') });
+
+		for (let index = 0; index <= MAX_BEFORE_RESTORE_VERSIONS; index++) {
+			await keepBeforeRestore({
+				documentId,
+				state: stateWith(`before ${index}`),
+				createdBy: owner.id,
+			});
+		}
+
+		const versions = await listVersions(documentId);
+		expect(versions.filter(({ kind }) => kind === 'before-restore')).toHaveLength(
+			MAX_BEFORE_RESTORE_VERSIONS,
+		);
+		expect(versions.filter(({ kind }) => kind === 'manual')).toHaveLength(1);
+	});
+
+	it('does not keep what the newest version already has', async () => {
+		const { owner, documentId } = await setup();
+		const state = stateWith('text');
+		const saved = await createVersion({ documentId, kind: 'manual', state });
+
+		const kept = await keepBeforeRestore({
+			documentId,
+			state,
+			createdBy: owner.id,
+		});
+
+		expect(kept._id.equals(saved._id)).toBe(true);
+		expect(await listVersions(documentId)).toHaveLength(1);
 	});
 });

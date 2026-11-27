@@ -202,6 +202,38 @@ describe('POST /api/documents/:id/versions', () => {
 	});
 });
 
+describe('POST /api/documents/:id/versions again, with nothing changed', () => {
+	it('answers the newest version instead of making a copy of the same text', async () => {
+		const { document, users } = await setup('what is there now');
+		const first = await request(app).post(base(document._id)).set(asUser(users.owner.id));
+
+		const second = await request(app).post(base(document._id)).set(asUser(users.editor.id));
+
+		expect(first.status).toBe(201);
+		expect(second.status).toBe(200);
+		expect(second.body.version._id).toBe(first.body.version._id);
+		expect(await listVersions(document._id)).toHaveLength(1);
+	});
+
+	it('gives the name to that version when the person names it, and makes a new one once the text changes', async () => {
+		const { document, users } = await setup('what is there now');
+		await request(app).post(base(document._id)).set(asUser(users.owner.id)).expect(201);
+
+		const named = await request(app)
+			.post(base(document._id))
+			.set(asUser(users.editor.id))
+			.send({ label: 'Ready to send' });
+		await applyDocumentUpdate({ documentId: document._id, update: contentUpdate('more text') });
+		const changed = await request(app).post(base(document._id)).set(asUser(users.owner.id));
+
+		expect(named.status).toBe(200);
+		expect(named.body.version).toMatchObject({ kind: 'manual', label: 'Ready to send' });
+		expect(changed.status).toBe(201);
+		expect(changed.body.version._id).not.toBe(named.body.version._id);
+		expect(await listVersions(document._id)).toHaveLength(2);
+	});
+});
+
 describe('POST /api/documents/:id/versions/:versionId/restore', () => {
 	const restoreUrl = (documentId: ObjectId, versionId: ObjectId) =>
 		`${base(documentId)}/${versionId}/restore`;
@@ -246,6 +278,27 @@ describe('POST /api/documents/:id/versions/:versionId/restore', () => {
 			.expect(204);
 
 		expect(contentOf(await loadDocumentState(document._id))).toContain('the new text');
+	});
+
+	it('does not keep a second copy of what the newest version already has', async () => {
+		const { document, users } = await setup('the new text');
+		const old = await createVersion({
+			documentId: document._id,
+			kind: 'manual',
+			state: contentUpdate('the old text'),
+		});
+		// The current text is already kept by a version
+		await request(app).post(base(document._id)).set(asUser(users.owner.id)).expect(201);
+
+		await request(app)
+			.post(restoreUrl(document._id, old._id))
+			.set(asUser(users.owner.id))
+			.expect(204);
+
+		expect((await listVersions(document._id)).map(({ kind }) => kind)).toEqual([
+			'manual',
+			'manual',
+		]);
 	});
 
 	it('does not keep a version of a document with nothing in it', async () => {
@@ -350,8 +403,12 @@ describe('the limit of versions per hour', () => {
 		const { document, users } = await setup('what is there now');
 		const asEditor = asUser(users.editor.id);
 
+		// Nothing changes between them, so the versions are not new ones: the limit counts the requests anyway
 		for (let attempt = 0; attempt < MAX_VERSION_WRITES_PER_HOUR - 1; attempt++) {
-			await request(app).post(base(document._id)).set(asEditor).expect(201);
+			await request(app)
+				.post(base(document._id))
+				.set(asEditor)
+				.expect(201 - Number(attempt > 0));
 		}
 		const [first] = await listVersions(document._id);
 		// The last one allowed is a restore: it shares the count
@@ -367,7 +424,7 @@ describe('the limit of versions per hour', () => {
 			.post(`${base(document._id)}/${first!._id}/restore`)
 			.set(asEditor)
 			.expect(429);
-		// Another person is not affected, and reading is never limited
+		// Another person is not affected (the restore changed the text, so this one is a new version), and reading is never limited
 		await request(app).post(base(document._id)).set(asUser(users.owner.id)).expect(201);
 		await request(app).get(base(document._id)).set(asEditor).expect(200);
 	});

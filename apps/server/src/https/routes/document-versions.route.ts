@@ -5,10 +5,11 @@ import { z } from 'zod';
 import { collections } from '../../config/mongodb.js';
 import { liveContent } from '../../realtime/live-content.js';
 import {
-	createVersion,
 	getVersion,
 	hasContent,
+	keepBeforeRestore,
 	listVersions,
+	saveManualVersion,
 } from '../../services/document-versions.service.js';
 import { documentAccess } from '../middleware/document-access.middleware.js';
 import { versionRateLimit } from '../middleware/version-rate-limit.middleware.js';
@@ -87,15 +88,16 @@ documentVersionsRouter.post(
 			return;
 		}
 
-		const { snapshot: _snapshot, ...version } = await createVersion({
+		const { version: saved, created } = await saveManualVersion({
 			documentId: res.locals.documentId,
-			kind: 'manual',
 			state,
 			label: parsed.data.label,
 			createdBy: new ObjectId(res.locals.user.id),
 		});
+		const { snapshot: _snapshot, ...version } = saved;
 
-		res.status(201).json({ version });
+		// 200 when nothing changed since the newest version, which is then the one answered
+		res.status(created ? 201 : 200).json({ version });
 	},
 );
 
@@ -115,9 +117,8 @@ documentVersionsRouter.post(
 		// So that restoring can be undone. A document with nothing in it has nothing to lose
 		const current = await liveContent.currentState(res.locals.documentId);
 		if (hasContent(current)) {
-			await createVersion({
+			await keepBeforeRestore({
 				documentId: res.locals.documentId,
-				kind: 'before-restore',
 				state: current,
 				createdBy: new ObjectId(res.locals.user.id),
 			});
