@@ -13,6 +13,7 @@ import {
 } from '../../services/document-content.service.js';
 import { createVersion, listVersions } from '../../services/document-versions.service.js';
 import { asUser, createDocument, createUser, newUserId } from '../../test/helpers.js';
+import { MAX_VERSION_WRITES_PER_HOUR } from '../middleware/version-rate-limit.middleware.js';
 
 vi.mock('../middleware/auth.middleware.js', () => import('../../test/mock-auth.js'));
 
@@ -341,5 +342,33 @@ describe('deleting documents', () => {
 		expect(await collections.documents.findOne({ _id: own._id })).toBeNull();
 		expect(await listVersions(own._id)).toHaveLength(0);
 		expect(await listVersions(other.document._id)).toHaveLength(1);
+	});
+});
+
+describe('the limit of versions per hour', () => {
+	it('answers 429 after too many saves, counts the restores with them, and counts per user', async () => {
+		const { document, users } = await setup('what is there now');
+		const asEditor = asUser(users.editor.id);
+
+		for (let attempt = 0; attempt < MAX_VERSION_WRITES_PER_HOUR - 1; attempt++) {
+			await request(app).post(base(document._id)).set(asEditor).expect(201);
+		}
+		const [first] = await listVersions(document._id);
+		// The last one allowed is a restore: it shares the count
+		await request(app)
+			.post(`${base(document._id)}/${first!._id}/restore`)
+			.set(asEditor)
+			.expect(204);
+
+		const save = await request(app).post(base(document._id)).set(asEditor);
+		expect(save.status).toBe(429);
+		expect(save.body.error).toBe('Too many versions. Try again later');
+		await request(app)
+			.post(`${base(document._id)}/${first!._id}/restore`)
+			.set(asEditor)
+			.expect(429);
+		// Another person is not affected, and reading is never limited
+		await request(app).post(base(document._id)).set(asUser(users.owner.id)).expect(201);
+		await request(app).get(base(document._id)).set(asEditor).expect(200);
 	});
 });
