@@ -1,6 +1,6 @@
 # Histórico de versões
 
-> **Estado: plano.** Primeira metade da semana 7; a busca (`docs/search.md`, ainda a escrever) é a segunda metade e terá o próprio plano e a própria branch.
+> **Estado: implementado** na branch `feat/versions`, um commit por passo da seção "Passos e commits". O que mudou na prática em relação ao plano está em "Diferenças do plano", no fim. Primeira metade da semana 7; a busca (`docs/search.md`, ainda a escrever) é a segunda metade e terá o próprio plano e a própria branch.
 
 Hoje, se alguém apaga metade do texto, ou se um colaborador bagunça o documento, não há como voltar: o `Ctrl+Z` só cobre a sessão aberta e o que a própria pessoa digitou. Este plano adiciona **versões**: fotos do conteúdo em momentos diferentes, que dá para listar, visualizar e restaurar.
 
@@ -116,3 +116,33 @@ Na branch `feat/versions`, um commit por passo:
 - Nomear ou apagar versões `auto` à mão.
 - Restaurar o título.
 - Versões de documento por usuário (histórico de quem editou o quê, linha a linha): o Yjs não guarda autoria por trecho sem trabalho extra.
+
+## Diferenças do plano
+
+O que mudou ao construir, e o que apareceu de verdade:
+
+- **Diálogo, não painel lateral.** O histórico abre num `Dialog` grande (lista à esquerda, pré-visualização à direita; empilhados no celular), como o de compartilhar. Não ocupa espaço do editor e reaproveitou o componente que já existia.
+- **A pré-visualização usa a extensão `Collaboration`, com um `Y.Doc` só dela.** O plano dizia "sem Collaboration" e converter com `yXmlFragmentToProsemirrorJSON`. Ligar a extensão a uma cópia do documento, sem socket nenhum, dá o mesmo resultado (leitura, sem tocar no documento ao vivo) com menos código, e o editor é montado pelo mesmo caminho do editor de verdade. Para o schema ser o mesmo, as extensões de nós e marcas foram extraídas para `lib/document-extensions.lib.ts`, usado pelos dois. O `ImageUploadNode` entra só na pré-visualização com um upload que sempre falha: o schema precisa conhecer o nó mesmo que nada seja enviado ali.
+- **A ponte se chama `live-content.ts` e faz duas coisas**, não uma: `currentState` (para a versão manual e para a `before-restore`) e `restore`. Sem socket server (testes de rota) ela funciona direto no Mongo, como se ninguém tivesse o documento aberto; assim as rotas são testáveis sem subir Socket.IO.
+- **`replaceContent` ficou em `services/replace-content.ts`**, uma função pura sobre um `Y.Doc` (a sala e o modo "só Mongo" usam a mesma). `currentState` na sala (`rooms.currentState`) abre a sala se ninguém a tem, que já pergunta às outras instâncias, e a fecha em seguida.
+- **O `hasContent` ficou fora do caminho quente.** A sala confere o tamanho do fragmento no `Y.Doc` que já tem em memória, e o serviço recebe o estado por função (`getState`), que só é chamada quando a versão vai mesmo ser criada. Sem isso, cada gravação (a cada 2s de digitação) decodificaria o documento inteiro só para descobrir que ainda não é hora.
+- **A listagem devolve o autor com o nome** (`createdBy: { userId, name }`, ou `null` nas automáticas, e `name: null` se a conta não existe mais), com um `$in` na coleção `user`. O plano só citava o autor na interface.
+- **`POST /versions` recusa documento vazio** (400 "The document is empty"): uma versão sem nada não ajuda ninguém, e é a mesma regra das automáticas.
+- **Apagar o documento também apaga as versões dos documentos de um guest** (`delete-guest-documents`), não só a rota de `DELETE`. O plano só citava a rota.
+
+### Verificações já feitas
+
+- **Aplicar o estado antigo não restaura nada**, e o teste mostra isso antes de mostrar o que funciona (`replace-content.test.ts`). O estado novo, com o conteúdo copiado, converge numa réplica que o recebe e num cliente que ficou offline durante o restore, sem trazer de volta o que foi apagado.
+- **Um cliente que não tem o conteúdo antigo não aplica o restore.** O update do restore insere o novo conteúdo ao lado de itens que ele apaga, então depende deles (o Yjs guarda o update como pendente até receber essas dependências). Num cliente de verdade isso não acontece, porque ele tem o conteúdo que o restore substitui. Apareceu num teste meu que escrevia o texto num `Y.Doc` e enviava de outro.
+- **O restore no meio de uma janela de gravação de outra instância.** Se o restore é feito pela instância B e o texto atual só está na sala da A (a gravação dela ainda não aconteceu), a B grava um update que depende de itens que o Mongo ainda não tem. O Mongo só fica completo quando a A grava, até 10s depois. O teste entre instâncias espera por isso. Se a A cair nesse intervalo, o texto que só ela tinha se perde no Mongo e sobrevive nos clientes, a mesma troca já aceita em `docs/redis.md` para qualquer edição.
+- **Quem digita durante o restore pode perder o trecho** (a edição se ancora em nós apagados). Documentado, como no plano; o teste só confere que as duas réplicas terminam iguais.
+
+### Números
+
+- Server: 204 testes com Redis (185 + 19 que precisam do Redis), contra 153 antes. Sem Redis, 185 passam e 19 são pulados.
+- E2E: 19 testes (eram 17), 30 execuções nas duas topologias (eram 26). O spec novo é `tests/versions.spec.ts`.
+
+### Ficou de fora
+
+- Rate limit nas rotas de versão: salvar versões à mão sem parar enche o Mongo (cada uma guarda o documento inteiro). A retenção só limita as automáticas.
+- Testar a retenção e a reivindicação com um Redis fora do ar, ou duas instâncias gravando o mesmo documento no mesmo instante, ponta a ponta. A reivindicação tem teste de concorrência no serviço (cinco chamadas simultâneas, uma versão), mas não entre instâncias reais.
