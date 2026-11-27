@@ -61,3 +61,12 @@ export async function deleteDocument(owner: Person, documentId: string) {
 	});
 	await expectOk(response);
 }
+
+/** Saves a version of the document as it is now, in the name of `person` (who has to be able to edit it). */
+export async function saveVersion(person: Person, documentId: string, label?: string) {
+	const response = await person.request.post(`/api/documents/${documentId}/versions`, {
+		data: { label },
+		headers: { origin: person.origin },
+	});
+	await expectOk(response);
+}
