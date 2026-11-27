@@ -11,6 +11,7 @@ import {
 	listVersions,
 } from '../../services/document-versions.service.js';
 import { documentAccess } from '../middleware/document-access.middleware.js';
+import { versionRateLimit } from '../middleware/version-rate-limit.middleware.js';
 
 // Mounted at /api/documents/:id/versions. authMiddleware is applied by the parent router.
 export const documentVersionsRouter = Router({ mergeParams: true });
@@ -68,33 +69,39 @@ documentVersionsRouter.get('/:versionId', documentAccess(), async (req, res) => 
 	res.json({ version: summary, snapshot: Buffer.from(snapshot.buffer).toString('base64') });
 });
 
-documentVersionsRouter.post('/', documentAccess({ minRole: 'editor' }), async (req, res) => {
-	const parsed = createVersionSchema.safeParse(req.body ?? {});
-	if (!parsed.success) {
-		res.status(400).json({ error: z.prettifyError(parsed.error) });
-		return;
-	}
+documentVersionsRouter.post(
+	'/',
+	versionRateLimit,
+	documentAccess({ minRole: 'editor' }),
+	async (req, res) => {
+		const parsed = createVersionSchema.safeParse(req.body ?? {});
+		if (!parsed.success) {
+			res.status(400).json({ error: z.prettifyError(parsed.error) });
+			return;
+		}
 
-	// What the editors have right now, which may be ahead of what is saved
-	const state = await liveContent.currentState(res.locals.documentId);
-	if (!hasContent(state)) {
-		res.status(400).json({ error: 'The document is empty' });
-		return;
-	}
+		// What the editors have right now, which may be ahead of what is saved
+		const state = await liveContent.currentState(res.locals.documentId);
+		if (!hasContent(state)) {
+			res.status(400).json({ error: 'The document is empty' });
+			return;
+		}
 
-	const { snapshot: _snapshot, ...version } = await createVersion({
-		documentId: res.locals.documentId,
-		kind: 'manual',
-		state,
-		label: parsed.data.label,
-		createdBy: new ObjectId(res.locals.user.id),
-	});
+		const { snapshot: _snapshot, ...version } = await createVersion({
+			documentId: res.locals.documentId,
+			kind: 'manual',
+			state,
+			label: parsed.data.label,
+			createdBy: new ObjectId(res.locals.user.id),
+		});
 
-	res.status(201).json({ version });
-});
+		res.status(201).json({ version });
+	},
+);
 
 documentVersionsRouter.post(
 	'/:versionId/restore',
+	versionRateLimit,
 	documentAccess({ minRole: 'editor' }),
 	async (req, res) => {
 		const versionId = parseVersionId(req.params.versionId);

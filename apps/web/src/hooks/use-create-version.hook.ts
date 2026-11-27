@@ -12,8 +12,11 @@ interface CreateVersionVariables {
 }
 
 const getCreateVersionErrorMessage = (error: Error) => {
-	// 400 carries a message written for the user (an empty document, a label that is too long)
-	if (error instanceof ApiError && error.status === 400) return error.message;
+	if (error instanceof ApiError) {
+		if (error.status === 429) return 'Too many versions saved. Try again later.';
+		// 400 carries a message written for the user (an empty document, a label that is too long)
+		if (error.status === 400) return error.message;
+	}
 
 	return 'Something went wrong. Please try again.';
 };

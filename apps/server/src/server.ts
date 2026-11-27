@@ -5,6 +5,7 @@ import { env } from './config/env.js';
 import { connectToMongo, mongoClient } from './config/mongodb.js';
 import { connectToRedis } from './config/redis.js';
 import { inviteRateLimitStore } from './https/middleware/invite-rate-limit.middleware.js';
+import { versionRateLimitStore } from './https/middleware/version-rate-limit.middleware.js';
 import { scheduleCleanupAbandonedGuests } from './jobs/cleanup-abandoned-guests.job.js';
 import { createSocketServer } from './realtime/socket-server.js';
 
@@ -21,6 +22,7 @@ if (env.REDIS_URL) {
 	try {
 		redis = await connectToRedis(env.REDIS_URL);
 		inviteRateLimitStore.useRedis(redis.pub);
+		versionRateLimitStore.useRedis(redis.pub);
 	} catch {
 		console.error('Could not connect to Redis, shutting down');
 		process.exit(1);

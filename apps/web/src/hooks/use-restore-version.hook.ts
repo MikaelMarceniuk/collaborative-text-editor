@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { toast } from '@/components/ui/toast';
-import { apiFetch } from '@/lib/api.lib';
+import { ApiError, apiFetch } from '@/lib/api.lib';
 
 import { documentsQueryKeys } from './use-documents.hook';
 import { useAuthenticatedSession } from './use-session.hook';
@@ -26,11 +26,14 @@ export const useRestoreVersion = () => {
 			});
 			toast.add({ type: 'success', title: 'Version restored' });
 		},
-		onError: () => {
+		onError: (error) => {
 			toast.add({
 				type: 'error',
 				title: 'Could not restore the version',
-				description: 'Something went wrong. Please try again.',
+				description:
+					error instanceof ApiError && error.status === 429
+						? 'Too many versions saved. Try again later.'
+						: 'Something went wrong. Please try again.',
 			});
 		},
 	});
