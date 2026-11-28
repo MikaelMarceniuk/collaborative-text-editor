@@ -1,6 +1,6 @@
 # Busca
 
-> **Estado: em andamento** na branch `feat/search`, um commit por passo da seção "Passos e commits". Segunda metade da semana 7 (a primeira foi o histórico de versões, `docs/versions.md`).
+> **Estado: implementado** na branch `feat/search`, um commit por passo da seção "Passos e commits". O que mudou na prática em relação ao plano está em "Diferenças do plano", no fim. Segunda metade da semana 7 (a primeira foi o histórico de versões, `docs/versions.md`).
 
 Hoje o campo de busca da lista de documentos filtra só pelo **título**, no navegador. Quem tem muitos documentos lembra do que escreveu, não do nome que deu. Este plano faz a busca olhar o **título e o texto** dos documentos a que a pessoa tem acesso, no server, e mostrar um trecho de onde a palavra apareceu.
 
@@ -69,3 +69,48 @@ GET /api/documents/search?q=palavra     # { documents: [{ ...DocumentSummary, sn
 - Buscar dentro do documento aberto: já existe (`Search and replace` do editor).
 - Buscar nas versões antigas.
 - Sugestões, correção de digitação e prefixos (`proj` achando `projeto`). O `$text` não faz; seria outra tecnologia (Atlas Search, por exemplo).
+
+## Diferenças do plano
+
+O que mudou ao construir, e o que apareceu de verdade:
+
+- **`extractText` recebe o fragmento, não o `Y.Doc`**, e `searchTextOf(state)` (decodifica o estado e chama o `extractText`) ficou em `document-content.service.ts`. Assim o serviço importa o `extract-text.ts` e não o contrário, sem importação circular.
+- **A leitura anda por uma lista de trabalho, não por recursão.** O conteúdo vem dos clientes, e um update feito à mão pode aninhar elementos em milhares de níveis sem recursão nenhuma (cada item é uma estrutura solta). Recursão estouraria a pilha; a lista só custa tempo. O teste monta 20 000 níveis.
+- **O `searchText` saiu das respostas já no passo 2**, não no 3: o `ydocState` e o `searchText` estão numa constante só (`HIDDEN_FIELDS`) nas projeções da lista, do `GET /:id` e do `PATCH`. A busca também tira o `score` do `textScore`, que só serve para ordenar: o teste que confere a resposta pegou esse vazamento.
+- **No máximo 10 palavras por busca** (`termsOf`). O plano não limitava; cada palavra vira uma frase para o Mongo conferir.
+- **O trecho acha palavras, não pedaços de texto.** Para dizer onde está a palavra, o texto e a busca passam pelo mesmo "dobrar" do índice (sem acento, minúsculo) e são cortados em palavras (`[\p{L}\p{N}]+`), então `projeto` não marca o começo de `projetos`, e `mail` marca o fim de `e-mail`, como o índice. Cada caractere dobrado lembra de onde veio no original, porque dobrar muda o tamanho (um `İ` vira dois caracteres) e o navegador precisa das posições do texto original. As bordas do trecho vão para o espaço mais próximo, e há reticências onde o texto foi cortado.
+- **O título não é destacado.** O resultado mostra o título como está; só o trecho do conteúdo tem as palavras marcadas.
+- **Os botões Todos / Meus / Compartilhados contam os resultados**, não a lista inteira, quando há algo digitado.
+- **A lista fica esmaecida enquanto a próxima resposta não chega** (`aria-busy`), em vez de piscar ou sumir, e o primeiro resultado mostra o esqueleto de carregamento.
+- **Dois scripts de backfill**: `backfill:search-text` (dev, com `tsx`) e `backfill:search-text:prd` (o `dist` compilado, com `--env-file=.env`, para rodar fora do Fly). No Fly o ambiente vem dos secrets, sem `.env`; ver "Deploy".
+
+### Deploy
+
+1. Publicar o server. No primeiro start o `ensureIndexes` cria o índice de texto (`documents_text`); numa coleção pequena é imediato. Até o backfill rodar, a busca acha qualquer documento pelo título, e pelo texto só os que foram editados depois do deploy.
+2. Rodar o backfill uma vez:
+
+```
+fly ssh console -a collaborative-text-editor-server -C "node dist/scripts/backfill-search-text.js"
+```
+
+A saída diz quantos documentos foram preenchidos e quantos foram pulados por terem mudado no meio. É seguro rodar de novo.
+
+### Verificações já feitas
+
+- **O comportamento do `$text` foi conferido num Mongo 8 antes do plano**: sem acento e sem maiúscula nos dois sentidos, só palavra inteira (`proj` não acha `projeto`, `projeto` não acha `projetos`), `-` separa palavras (`mail` acha `e-mail`) e frases entre aspas exigem todas.
+- **Os testes de rota usam o índice de verdade**, não um mock: ordem por título antes de conteúdo, "E" entre palavras, palavra no título e outra no texto no mesmo documento, só documentos em que a pessoa é membro, limite de 20, e a sintaxe do Mongo (`-palavra`, aspas soltas, só pontuação) não passa.
+- **O texto acompanha as edições**: apagar o parágrafo faz a palavra deixar de ser achada (a gravação refaz o `searchText` a partir do estado inteiro, não só do último update).
+- **O script compilado (`dist`) rodou num banco descartável** e preencheu o documento antigo.
+- **E2E, nas duas topologias**: achar pelo conteúdo ignorando acento e maiúscula, ver a palavra marcada e abrir o documento; "E" entre palavras e palavra inteira; e quem não é membro não acha, até ser convidado (Bob no outro server).
+
+### Números
+
+- Server: 267 testes com Redis (248 + 19 que precisam do Redis; ligam com `TEST_REDIS_URL`), contra 215 antes. Sem Redis, 248 passam e 19 são pulados.
+- E2E: 22 testes (eram 19), 36 execuções nas duas topologias (eram 30). O spec novo é `tests/search.spec.ts`.
+
+### Limites que ficaram
+
+- **O texto só muda quando o documento é gravado** (até 2 s depois de parar de digitar, 10 s no máximo, como o resto da gravação). Quem digita uma palavra e busca no mesmo segundo não a acha.
+- **Documentos acima de 100 000 caracteres só são achados pelo que vem antes do corte** (e pelo título).
+- **Paginação.** Os 20 melhores resultados são tudo que a lista mostra.
+- **Destacar o título.**

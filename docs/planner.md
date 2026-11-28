@@ -101,12 +101,12 @@ POST   /api/documents/:id/versions/:versionId/restore   # V2
 | 4 | Tempo real com Socket.IO + Yjs, persistência com debounce | feito (`docs/realtime.md`) |
 | 5 | Presença (cursores), compartilhamento e permissões | feito (`docs/sharing.md`, `docs/presence.md`) |
 | 6 | Redis adapter, testes de integração e E2E com dois navegadores | feito (`docs/redis.md`, `docs/e2e.md`) |
-| 7 | Histórico de versões e busca | histórico feito (`docs/versions.md`); busca a fazer |
+| 7 | Histórico de versões e busca | feito (`docs/versions.md`, `docs/search.md`) |
 | 8 | Deploy, README caprichado, GIF de demo, polimento | deploy feito; o resto a fazer |
 
 ### Próximo passo
 
-O histórico de versões da semana 7 está pronto (`docs/versions.md`): versões automáticas e manuais, pré-visualização e restauração como edição nova, entre instâncias e com E2E. A próxima entrega é a busca (título e conteúdo, palavra inteira, sem diferenciar maiúsculas nem acentos), que terá o próprio plano em `docs/search.md`. Pendente com você: confirmar no próximo deploy que `/api/socket.io` aceita o upgrade de WebSocket, e decidir se o Redis vai para o Fly (ver "Onde hospedar o Redis" em `docs/redis.md`).
+A semana 7 está pronta: o histórico de versões (`docs/versions.md`) e a busca por título e conteúdo, palavra inteira, sem diferenciar maiúsculas nem acentos (`docs/search.md`). Falta a semana 8: o GIF de demo e o diagrama da arquitetura no README, e o polimento. Pendente com você: rodar o backfill da busca no próximo deploy (comando em "Deploy" de `docs/search.md`), confirmar que `/api/socket.io` aceita o upgrade de WebSocket, e decidir se o Redis vai para o Fly (ver "Onde hospedar o Redis" em `docs/redis.md`).
 
 ## O que destacar no README
 

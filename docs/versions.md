@@ -1,6 +1,6 @@
 # Histórico de versões
 
-> **Estado: implementado** na branch `feat/versions`, um commit por passo da seção "Passos e commits". O que mudou na prática em relação ao plano está em "Diferenças do plano", no fim. Primeira metade da semana 7; a busca (`docs/search.md`, ainda a escrever) é a segunda metade e terá o próprio plano e a própria branch.
+> **Estado: implementado** na branch `feat/versions`, um commit por passo da seção "Passos e commits". O que mudou na prática em relação ao plano está em "Diferenças do plano", no fim. Primeira metade da semana 7; a busca (`docs/search.md`) é a segunda metade, com plano e branch próprios.
 
 Hoje, se alguém apaga metade do texto, ou se um colaborador bagunça o documento, não há como voltar: o `Ctrl+Z` só cobre a sessão aberta e o que a própria pessoa digitou. Este plano adiciona **versões**: fotos do conteúdo em momentos diferentes, que dá para listar, visualizar e restaurar.
 

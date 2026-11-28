@@ -24,6 +24,7 @@ A Notion-style document editor built on **Yjs CRDTs**, designed from day one for
 - **Guest mode.** Try the app without an account. Signing up later keeps the guest's documents, and abandoned guest accounts are cleaned up by a daily job.
 - **Sharing with roles.** The owner invites people by email as `editor` or `viewer`, changes their role or removes them. Roles are enforced on every API route and on every socket. A role change or a removal disconnects that member right away, and they come back with the new role (or not at all).
 - **Version history.** The server keeps snapshots of every document (automatically as it is edited, and on demand with a name). Anyone can preview a version; owners and editors restore it. A restore is a new edit, not a rollback: it replaces the content with a copy of the old one, so every open editor, on any server instance, gets it like any other change, and what was there before is kept as a version.
+- **Search.** The list searches the title and the text of every document you can open: whole words, ignoring case and accents, all the words typed, best match first, with the place where they were found marked. Mongo cannot read inside the Yjs binary, so each save also writes the plain text of the document next to it, and a text index does the rest.
 - **Tested permissions.** Vitest, Supertest and socket.io-client cover every document route and the socket for each role, against a real MongoDB.
 - **CI/CD.** Lint, format, type checks and tests on every push. Publishing a GitHub release deploys the API to Fly.io and then the web app to Vercel.
 
@@ -169,6 +170,7 @@ Playwright starts four processes of its own: two API instances (ports 4333 and 4
 - [x] Several server instances through an optional Redis
 - [x] E2E tests (two browsers editing the same document, on one and on two server instances)
 - [x] Version history with snapshots
+- [x] Search by the title and the text of documents
 
 ## Author
 
