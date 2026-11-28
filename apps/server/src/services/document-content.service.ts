@@ -2,11 +2,23 @@ import { Binary, type ObjectId } from 'mongodb';
 import * as Y from 'yjs';
 
 import { collections } from '../config/mongodb.js';
+import { extractText } from './extract-text.js';
 
 export class InvalidDocumentUpdateError extends Error {}
 
 /** The Y.XmlFragment the editor writes to: the default field of Tiptap's Collaboration extension. */
 export const CONTENT_FIELD = 'default';
+
+/** The text of an encoded document state, as kept in `searchText` for the search index. */
+export const searchTextOf = (state: Uint8Array) => {
+	const ydoc = new Y.Doc();
+	try {
+		Y.applyUpdate(ydoc, state);
+		return extractText(ydoc.getXmlFragment(CONTENT_FIELD));
+	} finally {
+		ydoc.destroy();
+	}
+};
 
 const assertValidDocumentUpdate = (update: Uint8Array) => {
 	try {
@@ -55,7 +67,12 @@ export const applyDocumentUpdate = async ({ documentId, update }: applyDocumentU
 				contentVersion: document.contentVersion ?? { $exists: false },
 			},
 			{
-				$set: { ydocState: new Binary(newState), updatedAt: new Date() },
+				// The text for the search goes in the same write, so it is never out of step with the content
+				$set: {
+					ydocState: new Binary(newState),
+					searchText: searchTextOf(newState),
+					updatedAt: new Date(),
+				},
 				$inc: { contentVersion: 1 },
 			},
 		);

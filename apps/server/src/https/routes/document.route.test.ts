@@ -1,4 +1,4 @@
-import { ObjectId } from 'mongodb';
+import { Binary, ObjectId } from 'mongodb';
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -78,6 +78,30 @@ describe('GET /api/documents/:id', () => {
 		const response = await request(app).get('/api/documents/nope').set(asUser(newUserId()));
 
 		expect(response.status).toBe(404);
+	});
+});
+
+describe('what a document response leaves out', () => {
+	it('never carries the binary content or the search text', async () => {
+		const { document, users } = await setup();
+		await collections.documents.updateOne(
+			{ _id: document._id },
+			{
+				$set: { ydocState: new Binary(new Uint8Array([1, 2, 3])), searchText: 'some secret text' },
+			},
+		);
+		const as = asUser(users.owner);
+
+		const responses = [
+			await request(app).get('/api/documents').set(as),
+			await request(app).get(`/api/documents/${document._id}`).set(as),
+			await request(app).patch(`/api/documents/${document._id}`).set(as).send({ title: 'New' }),
+		];
+
+		for (const response of responses) {
+			expect(response.status).toBe(200);
+			expect(JSON.stringify(response.body)).not.toMatch(/ydocState|searchText|some secret text/);
+		}
 	});
 });
 

@@ -5,11 +5,16 @@ import { z } from 'zod';
 import { collections } from '../../config/mongodb.js';
 import type { DocumentModel } from '../../models/document.model.js';
 import { accessNotifier } from '../../realtime/access-notifier.js';
+import { searchDocuments } from '../../services/document-search.service.js';
 import { deleteVersionsOf } from '../../services/document-versions.service.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { documentAccess } from '../middleware/document-access.middleware.js';
 import { documentMembersRouter } from './document-members.route.js';
 import { documentVersionsRouter } from './document-versions.route.js';
+
+// What a client never needs: the binary content and the text copy kept for the search
+const HIDDEN_FIELDS = { ydocState: 0, searchText: 0 } as const;
+type DocumentSummary = Omit<DocumentModel, 'ydocState' | 'searchText'>;
 
 export const documentRouter = Router();
 
@@ -26,9 +31,24 @@ documentRouter.get('/', async (_req, res) => {
 
 	const documents = await collections.documents
 		.find({ 'members.userId': userId })
-		.project<Omit<DocumentModel, 'ydocState'>>({ ydocState: 0 })
+		.project<DocumentSummary>(HIDDEN_FIELDS)
 		.sort({ updatedAt: -1 })
 		.toArray();
+
+	res.json({ documents });
+});
+
+const searchSchema = z.object({ q: z.string().trim().min(1).max(100) });
+
+// Declared before /:id, or "search" would be read as a document id
+documentRouter.get('/search', async (req, res) => {
+	const parsed = searchSchema.safeParse(req.query);
+	if (!parsed.success) {
+		res.status(400).json({ error: z.prettifyError(parsed.error) });
+		return;
+	}
+
+	const documents = await searchDocuments(new ObjectId(res.locals.user.id), parsed.data.q);
 
 	res.json({ documents });
 });
@@ -36,7 +56,7 @@ documentRouter.get('/', async (_req, res) => {
 documentRouter.get('/:id', documentAccess(), async (_req, res) => {
 	const document = await collections.documents.findOne(
 		{ _id: res.locals.documentId },
-		{ projection: { ydocState: 0 } },
+		{ projection: HIDDEN_FIELDS },
 	);
 
 	if (!document) {
@@ -76,7 +96,7 @@ documentRouter.patch('/:id', documentAccess({ minRole: 'editor' }), async (req, 
 	const document = await collections.documents.findOneAndUpdate(
 		{ _id: res.locals.documentId },
 		{ $set: { title: parsed.data.title, updatedAt: new Date() } },
-		{ returnDocument: 'after', projection: { ydocState: 0 } },
+		{ returnDocument: 'after', projection: HIDDEN_FIELDS },
 	);
 
 	if (!document) {

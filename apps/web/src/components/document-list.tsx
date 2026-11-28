@@ -28,6 +28,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useCreateDocument } from '@/hooks/use-create-document.hook';
 import type { DocumentSummary } from '@/hooks/use-documents.hook';
+import { useSearchDocuments } from '@/hooks/use-search-documents.hook';
 import { useAuthenticatedSession } from '@/hooks/use-session.hook';
 
 type DocumentFilter = 'all' | 'mine' | 'shared';
@@ -81,6 +82,14 @@ export const DocumentList = ({ documents, isPending, isError, onRetry }: Documen
 	const { user } = useAuthenticatedSession();
 	const { handleCreateDocument, isCreateDocumentPending } = useCreateDocument();
 	const [search, setSearch] = useState('');
+	const {
+		isSearching,
+		isSearchPending,
+		isSearchError,
+		isSearchUpdating,
+		searchResults,
+		refetchSearch,
+	} = useSearchDocuments(search);
 	const [filter, setFilter] = useState<DocumentFilter>('all');
 	const [documentToRename, setDocumentToRename] = useState<DocumentSummary | null>(null);
 	const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
@@ -104,21 +113,28 @@ export const DocumentList = ({ documents, isPending, isError, onRetry }: Documen
 		setIsDeleteDialogOpen(true);
 	};
 
-	const myDocumentsCount = documents.filter((document) => document.ownerId === user.id).length;
-	const counts: Record<DocumentFilter, number> = {
-		all: documents.length,
-		mine: myDocumentsCount,
-		shared: documents.length - myDocumentsCount,
-	};
-	const formatCount = (filter: DocumentFilter) => (isPending ? '' : ` (${counts[filter]})`);
+	// With something typed, the list is the answer of the server's search (title and text); without, all the documents
+	const shownDocuments = isSearching ? searchResults : documents;
+	const isShownPending = isSearching ? isSearchPending : isPending;
+	const isShownError = isSearching ? isSearchError : isError;
+	const retryShown = isSearching ? refetchSearch : onRetry;
 
-	// Filtered by hand (shouldFilter={false}) to keep the server's "most recently updated" order.
-	const query = search.trim().toLowerCase();
-	const visibleDocuments = documents.filter((document) => {
+	const myDocumentsCount = shownDocuments.filter((document) => document.ownerId === user.id).length;
+	const counts: Record<DocumentFilter, number> = {
+		all: shownDocuments.length,
+		mine: myDocumentsCount,
+		shared: shownDocuments.length - myDocumentsCount,
+	};
+	const formatCount = (filter: DocumentFilter) => (isShownPending ? '' : ` (${counts[filter]})`);
+
+	// Filtered by hand (shouldFilter={false}) to keep the order of the server: the most recently updated, or the best
+	// match when searching.
+	const query = search.trim();
+	const visibleDocuments = shownDocuments.filter((document) => {
 		const isMine = document.ownerId === user.id;
 		if (filter === 'mine' && !isMine) return false;
 		if (filter === 'shared' && isMine) return false;
-		return document.title.toLowerCase().includes(query);
+		return true;
 	});
 
 	const createDocumentButton = (
@@ -129,18 +145,18 @@ export const DocumentList = ({ documents, isPending, isError, onRetry }: Documen
 	);
 
 	const renderContent = () => {
-		if (isPending) {
+		if (isShownPending) {
 			return <DocumentListSkeleton />;
 		}
 
-		if (isError) {
+		if (isShownError) {
 			return (
 				<DocumentListEmpty
 					icon={<IconAlertTriangle />}
 					title="Couldn't load your documents"
 					description="Something went wrong while fetching your documents."
 					action={
-						<Button size="sm" variant="outline" onClick={onRetry}>
+						<Button size="sm" variant="outline" onClick={() => void retryShown()}>
 							<IconRefresh />
 							Try again
 						</Button>
@@ -155,7 +171,7 @@ export const DocumentList = ({ documents, isPending, isError, onRetry }: Documen
 					<DocumentListEmpty
 						icon={<IconSearch />}
 						title="No results"
-						description={`No documents match "${search.trim()}".`}
+						description={`No documents have "${query}" in the title or the text.`}
 					/>
 				);
 			}
@@ -181,7 +197,10 @@ export const DocumentList = ({ documents, isPending, isError, onRetry }: Documen
 		}
 
 		return (
-			<ScrollArea className="*:data-[slot=scroll-area-viewport]:max-h-80">
+			<ScrollArea
+				aria-busy={isSearchUpdating}
+				className="transition-opacity *:data-[slot=scroll-area-viewport]:max-h-80 aria-busy:opacity-60"
+			>
 				<CommandList className="max-h-none overflow-visible">
 					{visibleDocuments.map((document) => (
 						<DocumentItem
