@@ -14,6 +14,8 @@ export interface DocumentModel {
 	members: DocumentMember[];
 	ydocState?: Binary;
 	contentVersion?: number;
+	/** The plain text of the content, for the search index (see docs/search.md). Absent until the first save. */
+	searchText?: string;
 	/** When the last automatic version was claimed (see docs/versions.md). */
 	versionedAt?: Date;
 	createdAt: Date;
