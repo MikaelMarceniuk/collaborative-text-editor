@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { collections } from '../../config/mongodb.js';
 import type { DocumentModel } from '../../models/document.model.js';
 import { accessNotifier } from '../../realtime/access-notifier.js';
+import { searchDocuments } from '../../services/document-search.service.js';
 import { deleteVersionsOf } from '../../services/document-versions.service.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { documentAccess } from '../middleware/document-access.middleware.js';
@@ -33,6 +34,21 @@ documentRouter.get('/', async (_req, res) => {
 		.project<DocumentSummary>(HIDDEN_FIELDS)
 		.sort({ updatedAt: -1 })
 		.toArray();
+
+	res.json({ documents });
+});
+
+const searchSchema = z.object({ q: z.string().trim().min(1).max(100) });
+
+// Declared before /:id, or "search" would be read as a document id
+documentRouter.get('/search', async (req, res) => {
+	const parsed = searchSchema.safeParse(req.query);
+	if (!parsed.success) {
+		res.status(400).json({ error: z.prettifyError(parsed.error) });
+		return;
+	}
+
+	const documents = await searchDocuments(new ObjectId(res.locals.user.id), parsed.data.q);
 
 	res.json({ documents });
 });

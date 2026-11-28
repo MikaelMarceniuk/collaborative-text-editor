@@ -24,6 +24,13 @@ export const collections = {
 export async function ensureIndexes() {
 	// Serves the documents list: filter by member, newest first
 	await collections.documents.createIndex({ 'members.userId': 1, updatedAt: -1 });
+	// Serves the search: title and text in one index (Mongo allows one text index per collection), the title worth
+	// ten times the text. "none" turns off stemming and stop words, which are for a single language and the documents
+	// are in more than one. It still ignores case and accents, and matches whole words.
+	await collections.documents.createIndex(
+		{ title: 'text', searchText: 'text' },
+		{ name: 'documents_text', weights: { title: 10, searchText: 1 }, default_language: 'none' },
+	);
 	// Serves the version list of a document, newest first, and the retention of the automatic ones
 	await collections.documentVersions.createIndex({ documentId: 1, createdAt: -1 });
 }
