@@ -23,6 +23,7 @@ export interface DocumentSummary {
 export const documentsQueryKeys = {
 	all: ['documents'] as const,
 	list: (userId: string) => ['documents', userId] as const,
+	search: (userId: string, query: string) => ['documents', userId, 'search', query] as const,
 	detail: (userId: string, documentId: string) => ['documents', userId, documentId] as const,
 	members: (userId: string, documentId: string) =>
 		['documents', userId, documentId, 'members'] as const,
