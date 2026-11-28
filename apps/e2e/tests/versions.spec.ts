@@ -51,9 +51,13 @@ test('restoring a version puts its text back for everyone who has the document o
 	}
 	await expect(history).toBeHidden();
 
-	// What was there before is kept, so the restore can be undone
+	// What was there before is kept, so the restore can be undone. Usually that is a "Before a restore"
+	// version, but when an autosave already holds exactly that text it is the newest one and no copy is made
 	history = await openHistory(alice);
-	await history.getByRole('button', { name: /Before a restore/ }).click();
+	await history
+		.getByRole('button', { name: /Before a restore|Autosaved/ })
+		.first()
+		.click();
 	await expect(history.getByLabel('Content of the version')).toContainText(
 		'Something else entirely.',
 	);
